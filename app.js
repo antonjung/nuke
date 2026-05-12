@@ -235,6 +235,8 @@ async function processChain(initial) {
     renderAll();
     updateHUD();
 
+    if (checkWin()) return; // one player eliminated — stop chain
+
     // Collect next wave
     const next = [];
     for (let r = 0; r < G.size; r++)
