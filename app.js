@@ -74,7 +74,8 @@ function makeDots(count, player) {
   svg.setAttribute('aria-hidden', 'true');
 
   const fill = player === 'blue' ? '#4a9eff' : '#ff4a6e';
-  const filterId = `glow-${player}`;
+
+  svg.style.filter = `drop-shadow(0 0 4px ${fill})`;
 
   positions.forEach(([cx, cy]) => {
     const c = document.createElementNS(NS, 'circle');
@@ -82,7 +83,6 @@ function makeDots(count, player) {
     c.setAttribute('cy', cy);
     c.setAttribute('r', 11);
     c.setAttribute('fill', fill);
-    c.setAttribute('filter', `url(#${filterId})`);
     svg.appendChild(c);
   });
 

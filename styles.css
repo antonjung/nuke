@@ -199,6 +199,9 @@ main#grid-wrapper {
   width: 72%;
   height: 72%;
   position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   pointer-events: none;
   overflow: visible;
 }
