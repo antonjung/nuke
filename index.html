@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0a0a1a">
+  <meta name="description" content="Nuke – chain reaction strategy game">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Nuke">
+  <title>Nuke</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon.svg">
+  <link rel="stylesheet" href="styles.css">
+
+  <!-- Global SVG filter defs referenced by inline SVGs in cells -->
+  <svg style="display:none" aria-hidden="true">
+    <defs>
+      <filter id="glow-blue" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <filter id="glow-red" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+  </svg>
+</head>
+<body>
+  <div id="app">
+
+    <header>
+      <h1>NUKE</h1>
+      <div id="hud">
+        <div class="player-ind" id="blue-ind">
+          <div class="p-orb blue-orb"></div>
+          <div class="p-info">
+            <span class="p-name">Blue</span>
+            <span class="p-count" id="blue-count">0</span>
+          </div>
+        </div>
+        <div id="turn-arrow">&#9660;</div>
+        <div class="player-ind" id="red-ind">
+          <div class="p-orb red-orb"></div>
+          <div class="p-info">
+            <span class="p-name">Red</span>
+            <span class="p-count" id="red-count">0</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main id="grid-wrapper">
+      <div id="grid"></div>
+    </main>
+
+    <footer>
+      <label for="grid-size">Grid</label>
+      <select id="grid-size">
+        <option value="4">4 × 4</option>
+        <option value="5">5 × 5</option>
+        <option value="6" selected>6 × 6</option>
+        <option value="8">8 × 8</option>
+        <option value="10">10 × 10</option>
+        <option value="12">12 × 12</option>
+      </select>
+      <button id="new-game">New Game</button>
+    </footer>
+
+  </div>
+
+  <!-- Win overlay -->
+  <div id="win-modal" class="hidden" role="dialog" aria-modal="true" aria-label="Game over">
+    <div class="modal-card">
+      <div id="win-orb"></div>
+      <p id="win-label"></p>
+      <button id="play-again">Play Again</button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="80" fill="#0a0a1a"/>
+  <circle cx="256" cy="256" r="190" fill="none" stroke="#1a2040" stroke-width="2"/>
+  <!-- Outer ring -->
+  <circle cx="256" cy="256" r="160" fill="none" stroke="#4a9eff" stroke-width="16" opacity="0.6"/>
+  <!-- Three orbs in triangle formation -->
+  <circle cx="256" cy="110" r="44" fill="#4a9eff" opacity="0.9"/>
+  <circle cx="256" cy="110" r="44" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.4"/>
+  <circle cx="368" cy="305" r="44" fill="#ff4a6e" opacity="0.9"/>
+  <circle cx="368" cy="305" r="44" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.4"/>
+  <circle cx="144" cy="305" r="44" fill="#4a9eff" opacity="0.9"/>
+  <circle cx="144" cy="305" r="44" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.4"/>
+  <!-- Lines from center -->
+  <line x1="256" y1="256" x2="256" y2="154" stroke="#4a9eff" stroke-width="6" opacity="0.5"/>
+  <line x1="256" y1="256" x2="346" y2="308" stroke="#ff4a6e" stroke-width="6" opacity="0.5"/>
+  <line x1="256" y1="256" x2="166" y2="308" stroke="#4a9eff" stroke-width="6" opacity="0.5"/>
+  <!-- Center -->
+  <circle cx="256" cy="256" r="28" fill="#ffffff" opacity="0.95"/>
+</svg>
