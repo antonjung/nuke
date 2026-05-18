@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = '1.3.0';
+const VERSION = '1.4.0';
 
 // ── Dot layout (viewBox 0-100) ──────────────────────────────────────────────
 const DOT_POSITIONS = {
@@ -486,7 +486,7 @@ $('new-game').addEventListener('click', newGame);
 $('play-again').addEventListener('click', newGame);
 $('grid-size').addEventListener('change', newGame);
 $('mode').addEventListener('change', () => {
-  $('difficulty-wrap').style.display = $('mode').value === 'ai' ? '' : 'none';
+  $('difficulty').style.display = $('mode').value === 'ai' ? '' : 'none';
   newGame();
 });
 $('difficulty').addEventListener('change', newGame);

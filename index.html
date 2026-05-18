@@ -45,35 +45,28 @@
 
     <footer>
       <div class="footer-controls">
-        <div class="ctrl">
-          <label for="mode">Mode</label>
-          <select id="mode">
-            <option value="2p">2 Players</option>
-            <option value="ai" selected>vs CPU</option>
-          </select>
-        </div>
-        <div class="ctrl" id="difficulty-wrap">
-          <label for="difficulty">Level</label>
-          <select id="difficulty">
-            <option value="easy">Easy</option>
-            <option value="medium" selected>Medium</option>
-            <option value="hard">Hard</option>
-          </select>
-        </div>
-        <div class="ctrl">
-          <label for="grid-size">Grid</label>
-          <select id="grid-size">
-            <option value="4">4 × 4</option>
-            <option value="5">5 × 5</option>
-            <option value="6" selected>6 × 6</option>
-            <option value="8">8 × 8</option>
-            <option value="10">10 × 10</option>
-            <option value="12">12 × 12</option>
-          </select>
-        </div>
+        <select id="mode" aria-label="Game mode">
+          <option value="2p">2 Players</option>
+          <option value="ai" selected>vs CPU</option>
+        </select>
+        <select id="difficulty" aria-label="Difficulty">
+          <option value="easy">Easy</option>
+          <option value="medium" selected>Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+        <select id="grid-size" aria-label="Grid size">
+          <option value="4">4 × 4</option>
+          <option value="5">5 × 5</option>
+          <option value="6" selected>6 × 6</option>
+          <option value="8">8 × 8</option>
+          <option value="10">10 × 10</option>
+          <option value="12">12 × 12</option>
+        </select>
       </div>
-      <button id="new-game">New Game</button>
-      <span id="version"></span>
+      <div class="footer-actions">
+        <button id="new-game">New Game</button>
+        <span id="version"></span>
+      </div>
     </footer>
 
   </div>

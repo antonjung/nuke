@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE = 'nuke-v1';
+const CACHE = 'nuke-v1.4.0'; // bump this whenever VERSION in app.js changes
 const ASSETS = [
   './index.html',
   './styles.css',
