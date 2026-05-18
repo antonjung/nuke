@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = '2.2.0';
+const VERSION = '2.3.0';
 
 // ── Dot layout (viewBox 0-100) ──────────────────────────────────────────────
 const DOT_POSITIONS = {
@@ -450,7 +450,7 @@ async function onCellClick(e) {
 
   if (ok && G.epoch === myEpoch && G.aiMode && G.turn === 'red') {
     $('red-ind').classList.add('thinking');
-    await sleep(1200 + Math.random() * 1400);
+    await sleep(900 + Math.random() * 800);
     $('red-ind').classList.remove('thinking');
 
     if (G.epoch === myEpoch && !G.over) {
@@ -519,7 +519,7 @@ function newGame() {
 async function aiOpeningMove(epoch) {
   G.busy = true;
   $('red-ind').classList.add('thinking');
-  await sleep(1000 + Math.random() * 1200);
+  await sleep(700 + Math.random() * 700);
   $('red-ind').classList.remove('thinking');
   if (G.epoch !== epoch || G.over) { G.busy = false; return; }
   const move = aiPickMove();

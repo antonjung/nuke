@@ -29,19 +29,23 @@ window.Game3D = (() => {
   let cellMeshes = [];
   let edgeMeshes = [];
   let dotGroups = {};
+  let meshByKey = new Map();   // key → mesh (O(1) lookup)
   let rafId = null;
   let ready = false;
 
-  // Targeted rotation: lerp rotX/rotY toward a target point each frame
+  // Targeted rotation: lerp rotX/rotY toward a target (set by aimAt*)
   let rotXTarget = 0.35;
   let rotYTarget = 0.6;
-  let targeting  = false; // true during chain reactions
+  let targeting  = false;
 
-  // Critical cells: key → { mesh, edges, baseEI }; pulsed every frame in the render loop
+  // Critical cell pulse: key → { mesh, edges, baseEI }
   const criticalSet = new Map();
 
-  const SPACING = 1.08;
-  const CSIZE   = 0.9;
+  // Smooth material colour/opacity animation: key → { mesh, fc, tc, fo, to_op, t0, dur }
+  const matAnims = new Map();
+
+  const SPACING  = 1.08;
+  const CSIZE    = 0.9;
 
   const COL = {
     empty : { c: 0x1e2055, e: 0x000000, ei: 0.0,  op: 0.18 },
@@ -54,11 +58,10 @@ window.Game3D = (() => {
   const DOT_EI       = 0.4;
   const DOT_R        = CSIZE * 0.13;
 
-  // Die-face dot offsets in cell-local space
   const DOT_POS = {
     1: [[0,    0,    0   ]],
     2: [[-0.24, 0,   0   ], [0.24,  0,   0   ]],
-    3: [[-0.22, 0.2, 0   ], [0.22,  0.2, 0   ], [0,    -0.22, 0]],
+    3: [[-0.22, 0.2, 0   ], [0.22,  0.2, 0   ], [0, -0.22, 0]],
   };
 
   const $ = id => document.getElementById(id);
@@ -93,7 +96,7 @@ window.Game3D = (() => {
 
   const cap = (x, y, z, N) => nbrs(x, y, z, N).length;
 
-  // Normalise angle to [-π, π] so rotation lerp always takes the short path
+  // Normalise to [-π, π] so rotation lerp always takes the short arc
   function normAngle(a) {
     while (a >  Math.PI) a -= 2 * Math.PI;
     while (a < -Math.PI) a += 2 * Math.PI;
@@ -144,22 +147,24 @@ window.Game3D = (() => {
     function loop() {
       rafId = requestAnimationFrame(loop);
 
-      // Targeted rotation: smoothly pivot toward the explosion point
+      // Targeted rotation: smoothly pivot toward explosion / AI move
       if (targeting) {
-        const dx = rotXTarget - rotX;
-        const dy = normAngle(rotYTarget - rotY);
-        rotX += dx * 0.07;
-        rotY += dy * 0.07;
+        rotX += (rotXTarget - rotX) * 0.07;
+        rotY += normAngle(rotYTarget - rotY) * 0.07;
         group.rotation.x = rotX;
         group.rotation.y = rotY;
       }
 
-      // Critical cell pulse: orange edges + emissive glow at ~0.9 Hz
-      if (criticalSet.size) {
-        const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.0057);
-        for (const { mesh, edges, baseEI } of criticalSet.values()) {
-          if (mesh.material) mesh.material.emissiveIntensity = baseEI + pulse * 0.55;
-          if (edges?.material) edges.material.opacity = 0.35 + pulse * 0.65;
+      // Smooth colour / opacity animation for cell material transitions
+      if (matAnims.size) {
+        const now = performance.now();
+        for (const [k, a] of matAnims) {
+          const t = Math.min((now - a.t0) / a.dur, 1);
+          if (a.mesh.material) {
+            a.mesh.material.color.lerpColors(a.fc, a.tc, t);
+            a.mesh.material.opacity = a.fo + (a.to_op - a.fo) * t;
+          }
+          if (t >= 1) matAnims.delete(k);
         }
       }
 
@@ -198,7 +203,7 @@ window.Game3D = (() => {
     el.addEventListener('pointerdown', e => {
       pDown = true; pMoved = false;
       px = e.clientX; py = e.clientY;
-      targeting = false; // user takes control
+      targeting = false; // user takes manual control
       el.setPointerCapture(e.pointerId);
     });
 
@@ -250,10 +255,12 @@ window.Game3D = (() => {
     Object.values(dotGroups).flat().forEach(m => group.remove(m));
     cellMeshes = [];
     edgeMeshes = [];
-    dotGroups = {};
+    dotGroups  = {};
+    meshByKey.clear();
     criticalSet.clear();
+    matAnims.clear();
 
-    const N = G.N;
+    const N   = G.N;
     const off = (N - 1) / 2 * SPACING;
     const boxGeo  = new THREE.BoxGeometry(CSIZE, CSIZE, CSIZE);
     const edgeGeo = new THREE.EdgesGeometry(boxGeo);
@@ -261,15 +268,14 @@ window.Game3D = (() => {
 
     for (const [x, y, z] of G.surface) {
       const mat = new THREE.MeshStandardMaterial({
-        color: COL.empty.c, emissive: COL.empty.e,
-        emissiveIntensity: COL.empty.ei,
+        color: COL.empty.c, emissive: COL.empty.e, emissiveIntensity: COL.empty.ei,
         roughness: 0.35, metalness: 0.1,
-        transparent: true, opacity: COL.empty.op,
-        depthWrite: false,
+        transparent: true, opacity: COL.empty.op, depthWrite: false,
       });
       const mesh = new THREE.Mesh(boxGeo, mat);
-      const pos = [x * SPACING - off, y * SPACING - off, z * SPACING - off];
+      const pos  = [x * SPACING - off, y * SPACING - off, z * SPACING - off];
       mesh.position.set(...pos);
+
       const edges = new THREE.LineSegments(edgeGeo, edgeMat.clone());
       edges.position.set(...pos);
       group.add(edges);
@@ -278,16 +284,32 @@ window.Game3D = (() => {
       mesh.userData = { cx: x, cy: y, cz: z, edges };
       group.add(mesh);
       cellMeshes.push(mesh);
-
+      meshByKey.set(key(x, y, z), mesh);
       dotGroups[key(x, y, z)] = [];
     }
   }
 
-  function getMesh(x, y, z) {
-    return cellMeshes.find(m => m.userData.cx === x && m.userData.cy === y && m.userData.cz === z);
-  }
+  const getMesh = (x, y, z) => meshByKey.get(key(x, y, z));
 
   function renderAll() { G.surface.forEach(([x,y,z]) => renderCell(x, y, z)); }
+
+  // Start (or restart) a smooth colour + opacity transition for a cell
+  function animateMat(k, mesh, col, dur = 320) {
+    const tc = new THREE.Color(col.c);
+    const existing = matAnims.get(k);
+    // Start from wherever the current animation has reached
+    let fc, fo;
+    if (existing) {
+      const t = Math.min((performance.now() - existing.t0) / existing.dur, 1);
+      fc = existing.fc.clone().lerp(existing.tc, t);
+      fo = existing.fo + (existing.to_op - existing.fo) * t;
+    } else {
+      fc = mesh.material.color.clone();
+      fo = mesh.material.opacity;
+    }
+    if (fc.equals(tc) && Math.abs(fo - col.op) < 0.001) return;
+    matAnims.set(k, { mesh, fc, tc, fo, to_op: col.op, t0: performance.now(), dur });
+  }
 
   function renderCell(x, y, z) {
     const k    = key(x, y, z);
@@ -295,20 +317,19 @@ window.Game3D = (() => {
     const mesh = getMesh(x, y, z);
     if (!mesh) return;
 
-    const col = cell.p ? COL[cell.p] : COL.empty;
-    mesh.material.color.setHex(col.c);
-    mesh.material.emissive.setHex(col.e);
-    mesh.material.opacity = col.op;
+    const col    = cell.p ? COL[cell.p] : COL.empty;
+    const edges  = mesh.userData.edges;
+    const isCrit = cell.p && cell.n > 0 && cell.n === cap(x, y, z, G.N) - 1;
 
-    const edges = mesh.userData.edges;
-    const isCritical = cell.p && cell.n > 0 && cell.n === cap(x, y, z, G.N) - 1;
+    // Animate colour / opacity change
+    animateMat(k, mesh, col);
 
-    if (isCritical) {
+    // Emissive + critical set
+    if (isCrit) {
       if (!criticalSet.has(k)) {
         criticalSet.set(k, { mesh, edges, baseEI: col.ei });
         if (edges?.material) edges.material.color.setHex(0xff8800);
       }
-      // emissiveIntensity handled by render loop pulse — don't set here
     } else {
       if (criticalSet.has(k)) {
         criticalSet.delete(k);
@@ -316,6 +337,8 @@ window.Game3D = (() => {
       }
       mesh.material.emissiveIntensity = col.ei;
     }
+    // Set emissive target (not animated — instant is fine)
+    mesh.material.emissive.setHex(col.e);
 
     dotGroups[k].forEach(d => group.remove(d));
     dotGroups[k] = [];
@@ -326,11 +349,10 @@ window.Game3D = (() => {
 
     const dotGeo = new THREE.SphereGeometry(DOT_R, 10, 10);
     for (const [dx, dy, dz] of positions) {
-      const dotMat = new THREE.MeshStandardMaterial({
+      const dot = new THREE.Mesh(dotGeo, new THREE.MeshStandardMaterial({
         color: DOT_COLOR, emissive: DOT_EMISSIVE, emissiveIntensity: DOT_EI,
         roughness: 0.3, metalness: 0.1,
-      });
-      const dot = new THREE.Mesh(dotGeo, dotMat);
+      }));
       dot.position.set(
         mesh.position.x + dx * CSIZE,
         mesh.position.y + dy * CSIZE,
@@ -341,9 +363,27 @@ window.Game3D = (() => {
     }
   }
 
-  // ── Animation helpers ──────────────────────────────────────────────────────
+  // ── Rotation targeting ─────────────────────────────────────────────────────
 
-  // Smooth rAF animation shared by explode and receive pulses
+  // Aim the camera at the centroid of a list of [x,y,z] grid cells
+  function aimAt(cells, N) {
+    const off = (N - 1) / 2 * SPACING;
+    let wx = 0, wy = 0, wz = 0;
+    for (const [x, y, z] of cells) {
+      wx += x * SPACING - off;
+      wy += y * SPACING - off;
+      wz += z * SPACING - off;
+    }
+    wx /= cells.length; wy /= cells.length; wz /= cells.length;
+    rotYTarget = -Math.atan2(wx, wz);
+    rotXTarget = Math.max(-1.1, Math.min(1.1,
+      Math.atan2(wy, Math.sqrt(wx * wx + wz * wz))
+    ));
+    targeting = true;
+  }
+
+  // ── Explosion animation helpers ────────────────────────────────────────────
+
   function animatePulse(meshes, duration, maxScale, maxEI) {
     return new Promise(resolve => {
       const t0 = performance.now();
@@ -367,12 +407,78 @@ window.Game3D = (() => {
     });
   }
 
-  // Big slow pulse for exploding cells
-  const flashExplode  = meshes => animatePulse(meshes, 600, 0.55, 1.8);
-  // Smaller quick pulse for cells that just received counters
-  const flashReceive  = meshes => animatePulse(meshes, 280, 0.14, 0.7);
-  // Bright white-ish flash for cells that changed owner
-  const flashCapture  = meshes => animatePulse(meshes, 380, 0.1,  1.5);
+  const flashExplode = meshes => animatePulse(meshes, 500, 0.55, 1.8);
+  const flashReceive = meshes => animatePulse(meshes, 280, 0.14, 0.7);
+  const flashCapture = meshes => animatePulse(meshes, 360, 0.10, 1.5);
+
+  // Animate spheres flying along a bezier arc from exploding cells to their neighbours
+  function animateElectrons(toExplode, N) {
+    return new Promise(resolve => {
+      const flyers = [];
+      const t0  = performance.now();
+      const dur = 400;
+
+      for (const [x, y, z] of toExplode) {
+        const cell = G.cells[key(x, y, z)];
+        if (!cell?.p) continue;
+        const fromMesh = getMesh(x, y, z);
+        if (!fromMesh) continue;
+
+        const fill = cell.p === 'blue' ? 0x88ccff : 0xff88aa;
+        const emv  = cell.p === 'blue' ? 0x2266cc : 0xcc2244;
+
+        for (const [nx, ny, nz] of nbrs(x, y, z, N)) {
+          const toMesh = getMesh(nx, ny, nz);
+          if (!toMesh) continue;
+
+          const sphere = new THREE.Mesh(
+            new THREE.SphereGeometry(DOT_R * 1.3, 8, 8),
+            new THREE.MeshStandardMaterial({ color: fill, emissive: emv, emissiveIntensity: 0.9 }),
+          );
+          sphere.position.copy(fromMesh.position);
+          group.add(sphere);
+
+          const from = fromMesh.position.clone();
+          const to   = toMesh.position.clone();
+          // Arc: bezier control point pushed outward from the cube centre
+          const mid  = from.clone().add(to).multiplyScalar(0.5);
+          const outL = mid.length();
+          const ctrl = outL > 0.01
+            ? mid.clone().addScaledVector(mid.clone().normalize(), SPACING * 0.85)
+            : mid.clone().add(new THREE.Vector3(0, SPACING * 0.85, 0));
+
+          flyers.push({ sphere, from, ctrl, to });
+        }
+      }
+
+      if (!flyers.length) { resolve(); return; }
+
+      function tick(now) {
+        const t  = Math.min((now - t0) / dur, 1);
+        const mt = 1 - t;
+        for (const { sphere, from, ctrl, to } of flyers) {
+          // Quadratic bezier position
+          sphere.position.set(
+            mt*mt*from.x + 2*mt*t*ctrl.x + t*t*to.x,
+            mt*mt*from.y + 2*mt*t*ctrl.y + t*t*to.y,
+            mt*mt*from.z + 2*mt*t*ctrl.z + t*t*to.z,
+          );
+          sphere.scale.setScalar(1 - 0.5 * t); // shrink as it arrives
+        }
+        if (t < 1) {
+          requestAnimationFrame(tick);
+        } else {
+          for (const { sphere } of flyers) {
+            sphere.geometry.dispose();
+            sphere.material.dispose();
+            group.remove(sphere);
+          }
+          resolve();
+        }
+      }
+      requestAnimationFrame(tick);
+    });
+  }
 
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -385,11 +491,18 @@ window.Game3D = (() => {
 
     if (ok && G.epoch === epoch && G.aiMode && G.turn === 'red') {
       $('red-ind').classList.add('thinking');
-      await sleep(1200 + Math.random() * 1400);
+      await sleep(900 + Math.random() * 800);
       $('red-ind').classList.remove('thinking');
+
       if (G.epoch === epoch && !G.over) {
         const move = aiPick();
-        if (move) ok = await executeTurn(...move);
+        if (move) {
+          // Rotate to the chosen cell so the player can see it before it's placed
+          aimAt([move], G.N);
+          await sleep(500);
+          if (G.epoch === epoch && !G.over)
+            ok = await executeTurn(...move);
+        }
       }
     }
     if (G.epoch === epoch) G.busy = false;
@@ -419,24 +532,6 @@ window.Game3D = (() => {
     return true;
   }
 
-  // Compute the group-space centroid of a wave and aim the camera at it
-  function aimAtWave(wave, N) {
-    const off = (N - 1) / 2 * SPACING;
-    let wx = 0, wy = 0, wz = 0;
-    for (const [x, y, z] of wave) {
-      wx += x * SPACING - off;
-      wy += y * SPACING - off;
-      wz += z * SPACING - off;
-    }
-    wx /= wave.length; wy /= wave.length; wz /= wave.length;
-    // Spherical → Euler: bring the centroid direction to face +Z (camera)
-    rotYTarget = -Math.atan2(wx, wz);
-    rotXTarget = Math.max(-1.1, Math.min(1.1,
-      Math.atan2(wy, Math.sqrt(wx * wx + wz * wz))
-    ));
-    targeting = true;
-  }
-
   async function processChain(initial) {
     const epoch = G.epoch;
     const N = G.N;
@@ -445,28 +540,34 @@ window.Game3D = (() => {
     while (wave.length) {
       if (G.epoch !== epoch) { targeting = false; return; }
 
-      // 1 — pivot to face the exploding cells, then animate them
-      aimAtWave(wave, N);
-      const waveMeshes = wave.map(([x,y,z]) => getMesh(x, y, z)).filter(Boolean);
-      await flashExplode(waveMeshes);
-      if (G.epoch !== epoch) { targeting = false; return; }
-
-      // 2 — snapshot owners and collect receiver keys before applying logic
-      const prevOwner = {};
-      for (const [x,y,z] of G.surface) prevOwner[key(x,y,z)] = G.cells[key(x,y,z)].p;
-
-      const receiverKeys = new Set();
+      // Only animate cells that are still at capacity
       const toExplode = wave.filter(([x,y,z]) => {
         const c = G.cells[key(x,y,z)];
         return c && c.n >= cap(x, y, z, N);
       });
       if (!toExplode.length) break;
 
+      // Pivot cube to face this wave's centre
+      aimAt(toExplode, N);
+
+      const waveMeshes = toExplode.map(([x,y,z]) => getMesh(x, y, z)).filter(Boolean);
+
+      // Snapshot owners + collect receiver keys before logic runs
+      const prevOwner = {};
+      for (const [x,y,z] of G.surface) prevOwner[key(x,y,z)] = G.cells[key(x,y,z)].p;
+      const receiverKeys = new Set();
       for (const [x,y,z] of toExplode)
         for (const [nx,ny,nz] of nbrs(x, y, z, N))
           receiverKeys.add(key(nx, ny, nz));
 
-      // 3 — apply explosion logic
+      // Explosion pulse + electron flight in parallel (electrons start 120ms in)
+      await Promise.all([
+        flashExplode(waveMeshes),
+        sleep(120).then(() => animateElectrons(toExplode, N)),
+      ]);
+      if (G.epoch !== epoch) { targeting = false; return; }
+
+      // Apply explosion logic
       for (const [x,y,z] of toExplode) {
         const cell = G.cells[key(x,y,z)];
         if (!cell || cell.n < cap(x,y,z,N)) continue;
@@ -480,19 +581,18 @@ window.Game3D = (() => {
         }
       }
 
-      renderAll();   // updates criticalSet for newly-critical cells
+      // renderCell now starts colour animations instead of snapping instantly
+      renderAll();
       updateHUD();
       if (checkWin()) { targeting = false; return; }
 
-      // 4 — separate captured (owner changed) from plain-received; flash both in parallel
-      const capturedMeshes = [];
-      const recvOnlyMeshes = [];
+      // Flash captured vs plain-received cells in parallel
+      const capturedMeshes = [], recvOnlyMeshes = [];
       for (const k of receiverKeys) {
         const [x,y,z] = k.split(',').map(Number);
         const m = getMesh(x, y, z);
         if (!m) continue;
-        if (G.cells[k].p && G.cells[k].p !== prevOwner[k]) capturedMeshes.push(m);
-        else recvOnlyMeshes.push(m);
+        (G.cells[k].p && G.cells[k].p !== prevOwner[k] ? capturedMeshes : recvOnlyMeshes).push(m);
       }
       await Promise.all([flashCapture(capturedMeshes), flashReceive(recvOnlyMeshes)]);
       if (G.epoch !== epoch) { targeting = false; return; }
@@ -608,9 +708,8 @@ window.Game3D = (() => {
 
       if (G.aiDifficulty === 'hard') {
         const oppMoves = validMoves(res, opp);
-        const sample = oppMoves.length > 6
-          ? oppMoves.sort(() => Math.random()-0.5).slice(0, 6)
-          : oppMoves;
+        const sample   = oppMoves.length > 6
+          ? oppMoves.sort(() => Math.random()-0.5).slice(0, 6) : oppMoves;
         if (sample.length) {
           let worst = Infinity;
           for (const [ox,oy,oz] of sample) {
@@ -630,11 +729,15 @@ window.Game3D = (() => {
   async function aiOpeningMove(epoch) {
     G.busy = true;
     $('red-ind').classList.add('thinking');
-    await sleep(1000 + Math.random() * 1200);
+    await sleep(700 + Math.random() * 700);
     $('red-ind').classList.remove('thinking');
     if (G.epoch !== epoch || G.over) { G.busy = false; return; }
     const move = aiPick();
-    if (move) await executeTurn(...move);
+    if (move) {
+      aimAt([move], G.N);
+      await sleep(400);
+      if (G.epoch === epoch && !G.over) await executeTurn(...move);
+    }
     if (G.epoch === epoch) G.busy = false;
   }
 
@@ -654,6 +757,7 @@ window.Game3D = (() => {
     for (const [x,y,z] of G.surface) G.cells[key(x,y,z)] = { p: null, n: 0 };
     targeting = false;
     criticalSet.clear();
+    matAnims.clear();
     $('red-ind').classList.remove('thinking');
     $('win-modal').classList.add('hidden');
   }
