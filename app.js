@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = '1.1.0';
+const VERSION = '1.3.0';
 
 // ── Dot layout (viewBox 0-100) ──────────────────────────────────────────────
 const DOT_POSITIONS = {

@@ -19,10 +19,7 @@
   <div id="app">
 
     <header>
-      <div id="title-group">
-        <h1>NUKE</h1>
-        <span id="version"></span>
-      </div>
+      <h1>NUKE</h1>
       <div id="hud">
         <div class="player-ind" id="blue-ind">
           <div class="p-orb blue-orb"></div>
@@ -47,29 +44,36 @@
     </main>
 
     <footer>
-      <label for="mode">Mode</label>
-      <select id="mode">
-        <option value="2p">2 Players</option>
-        <option value="ai" selected>vs Computer</option>
-      </select>
-      <span id="difficulty-wrap">
-        <label for="difficulty">Level</label>
-        <select id="difficulty">
-          <option value="easy">Easy</option>
-          <option value="medium" selected>Medium</option>
-          <option value="hard">Hard</option>
-        </select>
-      </span>
-      <label for="grid-size">Grid</label>
-      <select id="grid-size">
-        <option value="4">4 × 4</option>
-        <option value="5">5 × 5</option>
-        <option value="6" selected>6 × 6</option>
-        <option value="8">8 × 8</option>
-        <option value="10">10 × 10</option>
-        <option value="12">12 × 12</option>
-      </select>
+      <div class="footer-controls">
+        <div class="ctrl">
+          <label for="mode">Mode</label>
+          <select id="mode">
+            <option value="2p">2 Players</option>
+            <option value="ai" selected>vs CPU</option>
+          </select>
+        </div>
+        <div class="ctrl" id="difficulty-wrap">
+          <label for="difficulty">Level</label>
+          <select id="difficulty">
+            <option value="easy">Easy</option>
+            <option value="medium" selected>Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+        </div>
+        <div class="ctrl">
+          <label for="grid-size">Grid</label>
+          <select id="grid-size">
+            <option value="4">4 × 4</option>
+            <option value="5">5 × 5</option>
+            <option value="6" selected>6 × 6</option>
+            <option value="8">8 × 8</option>
+            <option value="10">10 × 10</option>
+            <option value="12">12 × 12</option>
+          </select>
+        </div>
+      </div>
       <button id="new-game">New Game</button>
+      <span id="version"></span>
     </footer>
 
   </div>

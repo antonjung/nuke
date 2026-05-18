@@ -68,20 +68,10 @@ h1 {
 }
 
 #version {
-  font-size: 0.62rem;
+  font-size: 0.72rem;
   color: var(--text-dim);
-  opacity: 0.5;
-  letter-spacing: 0.04em;
-  align-self: flex-end;
-  padding-bottom: 2px;
-  margin-left: -6px;
-}
-
-#title-group {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 1px;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
 }
 
 /* HUD */
@@ -280,17 +270,33 @@ footer {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  padding: 10px 16px;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
   background: var(--surface);
   border-top: 1px solid var(--border);
 }
 
+.footer-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.ctrl {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
 footer label {
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   color: var(--text-dim);
   font-weight: 600;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
 select {
@@ -298,8 +304,8 @@ select {
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 6px;
-  padding: 6px 10px;
-  font-size: 0.85rem;
+  padding: 5px 6px;
+  font-size: 0.8rem;
   cursor: pointer;
   outline: none;
   transition: border-color 0.2s;
@@ -384,12 +390,6 @@ button:active { transform: scale(0.96); }
 #red-ind.thinking {
   animation: ai-thinking 0.65s ease-in-out infinite;
 }
-
-#difficulty-wrap {
-  display: contents;
-}
-
-footer { flex-wrap: wrap; }
 
 /* ── Responsive tweaks ─────────────────────────────────────────────────────── */
 @media (max-width: 380px) {
