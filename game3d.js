@@ -660,6 +660,11 @@ window.Game3D = (() => {
     const arrow = $('turn-arrow');
     arrow.innerHTML = '&#9733;';
     arrow.style.color = `var(--${player})`;
+    const bar = $('result-bar');
+    bar.className = player;
+    bar.textContent = G.aiMode
+      ? (player === 'blue' ? 'You Win!' : 'CPU Wins!')
+      : (player === 'blue' ? 'Blue Wins!' : 'Red Wins!');
   }
 
   // ── AI ─────────────────────────────────────────────────────────────────────
@@ -784,6 +789,7 @@ window.Game3D = (() => {
     const arrow = $('turn-arrow');
     arrow.innerHTML = '&#9660;';
     arrow.style.color = '';
+    $('result-bar').className = 'hidden';
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────

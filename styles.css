@@ -471,6 +471,39 @@ button:active { transform: scale(0.96); }
 
 #help-close { display: block; margin: 0 auto; padding: 9px 32px; }
 
+/* ── Result banner ─────────────────────────────────────────────────────────── */
+#result-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 20px;
+  font-size: clamp(1.1rem, 5vw, 1.6rem);
+  font-weight: 900;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  animation: result-flash 1s ease-in-out infinite;
+}
+#result-bar.hidden { display: none; }
+#result-bar.blue {
+  color: var(--blue);
+  background: linear-gradient(90deg, transparent 0%, rgba(74,158,255,0.18) 40%, rgba(74,158,255,0.18) 60%, transparent 100%);
+  border-top: 1px solid rgba(74,158,255,0.5);
+  border-bottom: 1px solid rgba(74,158,255,0.5);
+  text-shadow: 0 0 18px var(--blue);
+}
+#result-bar.red {
+  color: var(--red);
+  background: linear-gradient(90deg, transparent 0%, rgba(255,74,110,0.18) 40%, rgba(255,74,110,0.18) 60%, transparent 100%);
+  border-top: 1px solid rgba(255,74,110,0.5);
+  border-bottom: 1px solid rgba(255,74,110,0.5);
+  text-shadow: 0 0 18px var(--red);
+}
+@keyframes result-flash {
+  0%, 100% { opacity: 0.75; }
+  50%       { opacity: 1;    text-shadow: 0 0 36px currentColor, 0 0 60px currentColor; }
+}
+
 /* ── Win indicator ─────────────────────────────────────────────────────────── */
 @keyframes win-glow-blue {
   0%, 100% { box-shadow: 0 0 14px var(--blue-glow); }

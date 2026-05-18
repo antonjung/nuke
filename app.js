@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = '2.3.4';
+const VERSION = '2.3.5';
 
 // ── Dot layout (viewBox 0-100) ──────────────────────────────────────────────
 const DOT_POSITIONS = {
@@ -469,6 +469,11 @@ function showWin(player) {
   const arrow = $('turn-arrow');
   arrow.innerHTML = '&#9733;';
   arrow.style.color = `var(--${player})`;
+  const bar = $('result-bar');
+  bar.className = player;
+  bar.textContent = G.aiMode
+    ? (player === 'blue' ? 'You Win!' : 'CPU Wins!')
+    : (player === 'blue' ? 'Blue Wins!' : 'Red Wins!');
 }
 
 // ── New game ──────────────────────────────────────────────────────────────────
@@ -487,6 +492,7 @@ function newGame() {
   const arrow = $('turn-arrow');
   arrow.innerHTML = '&#9660;';
   arrow.style.color = '';
+  $('result-bar').className = 'hidden';
 
   if ($('board').value === '3d') {
     if (window.Game3D && Game3D.isReady()) {
