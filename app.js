@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = '1.5.0';
+const VERSION = '1.6.0';
 
 // ── Dot layout (viewBox 0-100) ──────────────────────────────────────────────
 const DOT_POSITIONS = {
@@ -465,10 +465,11 @@ function showWin(player) {
 function newGame() {
   G.epoch++;
   G.size          = +$('grid-size').value;
-  G.aiMode        = $('mode').value === 'ai';
-  G.aiDifficulty  = $('difficulty').value;
-  const cpuFirst  = G.aiMode && $('first-move').value === 'cpu';
-  G.turn          = cpuFirst ? 'red' : 'blue';
+  const mode      = $('mode').value;
+  G.aiMode        = mode !== '2p';
+  G.aiDifficulty  = mode; // 'easy' | 'medium' | 'hard' (ignored when '2p')
+  const redFirst  = G.aiMode && $('first-move').value === 'red';
+  G.turn          = redFirst ? 'red' : 'blue';
   G.grid          = mkGrid(G.size);
   G.over          = false;
   G.busy          = false;
@@ -480,7 +481,7 @@ function newGame() {
   renderAll();
   updateHUD();
 
-  if (cpuFirst) aiOpeningMove(G.epoch);
+  if (redFirst) aiOpeningMove(G.epoch);
 }
 
 async function aiOpeningMove(epoch) {
@@ -500,13 +501,16 @@ $('new-game').addEventListener('click', newGame);
 $('play-again').addEventListener('click', newGame);
 $('grid-size').addEventListener('change', newGame);
 $('mode').addEventListener('change', () => {
-  const isAi = $('mode').value === 'ai';
-  $('difficulty').style.display  = isAi ? '' : 'none';
-  $('first-move').style.display  = isAi ? '' : 'none';
+  $('first-move').style.display = $('mode').value !== '2p' ? '' : 'none';
   newGame();
 });
-$('difficulty').addEventListener('change', newGame);
 $('first-move').addEventListener('change', newGame);
+
+$('help-btn').addEventListener('click', () => $('help-modal').classList.remove('hidden'));
+$('help-close').addEventListener('click', () => $('help-modal').classList.add('hidden'));
+$('help-modal').addEventListener('click', e => {
+  if (e.target === $('help-modal')) $('help-modal').classList.add('hidden');
+});
 
 let resizeTimer;
 window.addEventListener('resize', () => {

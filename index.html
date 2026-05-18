@@ -12,14 +12,15 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icons/icon.svg">
   <link rel="stylesheet" href="styles.css">
-
-
 </head>
 <body>
   <div id="app">
 
     <header>
-      <h1>NUKE</h1>
+      <div id="title-group">
+        <h1>NUKE</h1>
+        <span id="version"></span>
+      </div>
       <div id="hud">
         <div class="player-ind" id="blue-ind">
           <div class="p-orb blue-orb"></div>
@@ -37,40 +38,36 @@
           </div>
         </div>
       </div>
+      <button id="help-btn" aria-label="How to play">?</button>
     </header>
+
+    <div id="options-bar">
+      <select id="mode" aria-label="Game mode">
+        <option value="2p">vs Human</option>
+        <option value="easy">AI (Easy)</option>
+        <option value="medium" selected>AI (Medium)</option>
+        <option value="hard">AI (Hard)</option>
+      </select>
+      <select id="first-move" aria-label="Who goes first">
+        <option value="blue" selected>Blue first</option>
+        <option value="red">Red first</option>
+      </select>
+      <select id="grid-size" aria-label="Grid size">
+        <option value="4">4 × 4</option>
+        <option value="5">5 × 5</option>
+        <option value="6" selected>6 × 6</option>
+        <option value="8">8 × 8</option>
+        <option value="10">10 × 10</option>
+        <option value="12">12 × 12</option>
+      </select>
+    </div>
 
     <main id="grid-wrapper">
       <div id="grid"></div>
     </main>
 
     <footer>
-      <div class="footer-controls">
-        <select id="mode" aria-label="Game mode">
-          <option value="2p">2 Players</option>
-          <option value="ai" selected>vs CPU</option>
-        </select>
-        <select id="difficulty" aria-label="Difficulty">
-          <option value="easy">Easy</option>
-          <option value="medium" selected>Medium</option>
-          <option value="hard">Hard</option>
-        </select>
-        <select id="first-move" aria-label="Who goes first">
-          <option value="me" selected>Me first</option>
-          <option value="cpu">CPU first</option>
-        </select>
-        <select id="grid-size" aria-label="Grid size">
-          <option value="4">4 × 4</option>
-          <option value="5">5 × 5</option>
-          <option value="6" selected>6 × 6</option>
-          <option value="8">8 × 8</option>
-          <option value="10">10 × 10</option>
-          <option value="12">12 × 12</option>
-        </select>
-      </div>
-      <div class="footer-actions">
-        <button id="new-game">New Game</button>
-        <span id="version"></span>
-      </div>
+      <button id="new-game">New Game</button>
     </footer>
 
   </div>
@@ -81,6 +78,21 @@
       <div id="win-orb"></div>
       <p id="win-label"></p>
       <button id="play-again">Play Again</button>
+    </div>
+  </div>
+
+  <!-- How to play overlay -->
+  <div id="help-modal" class="hidden" role="dialog" aria-modal="true" aria-label="How to play">
+    <div class="modal-card help-card">
+      <h2>How to Play</h2>
+      <ol>
+        <li>Take turns placing one counter on any empty square or one you already own.</li>
+        <li>When a square holds as many counters as it has neighbours it <strong>explodes</strong> — counters fly out to every neighbour.</li>
+        <li>Captured neighbours change to your colour. Chain reactions keep going until everything is stable.</li>
+        <li>You win by being the only player left with counters on the board.</li>
+      </ol>
+      <p class="help-tip">Corner squares need only 2 counters to explode. Edge squares need 3. Inner squares need 4.</p>
+      <button id="help-close">Got it</button>
     </div>
   </div>
 
