@@ -155,6 +155,15 @@ window.Game3D = (() => {
         group.rotation.y = rotY;
       }
 
+      // Critical cell pulse: orange edges + emissive glow
+      if (criticalSet.size) {
+        const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.0057);
+        for (const { mesh, edges, baseEI } of criticalSet.values()) {
+          if (mesh.material) mesh.material.emissiveIntensity = baseEI + pulse * 0.55;
+          if (edges?.material) edges.material.opacity = 0.35 + pulse * 0.65;
+        }
+      }
+
       // Smooth colour / opacity animation for cell material transitions
       if (matAnims.size) {
         const now = performance.now();
@@ -480,6 +489,44 @@ window.Game3D = (() => {
     });
   }
 
+  // Wobble the dot spheres in exploding cells just before they fly off
+  function wobbleDots(cells) {
+    return new Promise(resolve => {
+      const t0  = performance.now();
+      const dur = 240;
+      const amp = CSIZE * 0.10;
+      const entries = [];
+      for (const [x, y, z] of cells) {
+        for (const dot of (dotGroups[key(x, y, z)] || [])) {
+          entries.push({
+            dot,
+            base: dot.position.clone(),
+            axis: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize(),
+            phase: Math.random() * Math.PI * 2,
+          });
+        }
+      }
+      if (!entries.length) { resolve(); return; }
+
+      function tick(now) {
+        const el  = now - t0;
+        const t   = Math.min(el / dur, 1);
+        const env = Math.sin(t * Math.PI); // ramps up then back down
+        for (const { dot, base, axis, phase } of entries) {
+          const s = Math.sin(el * 0.001 * 22 * Math.PI * 2 + phase) * amp * env;
+          dot.position.set(base.x + axis.x * s, base.y + axis.y * s, base.z + axis.z * s);
+        }
+        if (t < 1) {
+          requestAnimationFrame(tick);
+        } else {
+          for (const { dot, base } of entries) dot.position.copy(base);
+          resolve();
+        }
+      }
+      requestAnimationFrame(tick);
+    });
+  }
+
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // ── Game logic ─────────────────────────────────────────────────────────────
@@ -520,6 +567,8 @@ window.Game3D = (() => {
     updateHUD();
 
     if (cell.n >= cap(x, y, z, N)) {
+      await sleep(150);
+      if (G.epoch !== epoch) return false;
       await processChain([[x, y, z]]);
     }
     if (G.epoch !== epoch) return false;
@@ -560,7 +609,9 @@ window.Game3D = (() => {
         for (const [nx,ny,nz] of nbrs(x, y, z, N))
           receiverKeys.add(key(nx, ny, nz));
 
-      // Explosion pulse + electron flight in parallel (electrons start 120ms in)
+      // Wobble the dots, then explosion pulse + electron flight in parallel
+      await wobbleDots(toExplode);
+      if (G.epoch !== epoch) { targeting = false; return; }
       await Promise.all([
         flashExplode(waveMeshes),
         sleep(120).then(() => animateElectrons(toExplode, N)),
