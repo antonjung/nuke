@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = '1.4.0';
+const VERSION = '1.5.0';
 
 // ── Dot layout (viewBox 0-100) ──────────────────────────────────────────────
 const DOT_POSITIONS = {
@@ -467,8 +467,9 @@ function newGame() {
   G.size          = +$('grid-size').value;
   G.aiMode        = $('mode').value === 'ai';
   G.aiDifficulty  = $('difficulty').value;
+  const cpuFirst  = G.aiMode && $('first-move').value === 'cpu';
+  G.turn          = cpuFirst ? 'red' : 'blue';
   G.grid          = mkGrid(G.size);
-  G.turn          = 'blue';
   G.over          = false;
   G.busy          = false;
   G.played        = { blue: false, red: false };
@@ -478,6 +479,19 @@ function newGame() {
   buildGrid();
   renderAll();
   updateHUD();
+
+  if (cpuFirst) aiOpeningMove(G.epoch);
+}
+
+async function aiOpeningMove(epoch) {
+  G.busy = true;
+  $('red-ind').classList.add('thinking');
+  await sleep(500 + Math.random() * 400);
+  $('red-ind').classList.remove('thinking');
+  if (G.epoch !== epoch || G.over) { G.busy = false; return; }
+  const move = aiPickMove();
+  if (move) await executeTurn(move[0], move[1]);
+  if (G.epoch === epoch) G.busy = false;
 }
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
@@ -486,10 +500,13 @@ $('new-game').addEventListener('click', newGame);
 $('play-again').addEventListener('click', newGame);
 $('grid-size').addEventListener('change', newGame);
 $('mode').addEventListener('change', () => {
-  $('difficulty').style.display = $('mode').value === 'ai' ? '' : 'none';
+  const isAi = $('mode').value === 'ai';
+  $('difficulty').style.display  = isAi ? '' : 'none';
+  $('first-move').style.display  = isAi ? '' : 'none';
   newGame();
 });
 $('difficulty').addEventListener('change', newGame);
+$('first-move').addEventListener('change', newGame);
 
 let resizeTimer;
 window.addEventListener('resize', () => {
