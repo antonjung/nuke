@@ -33,11 +33,12 @@ window.Game3D = (() => {
 
   const SPACING = 1.08;   // cell size + gap
   const CSIZE   = 1.0;    // visual cell size (slightly < SPACING)
+  const DOT_PUSH = 0.52;  // distance from cell center to dot (just past face at 0.45)
 
   const COL = {
-    empty : { c: 0x141430, e: 0x000000, ei: 0.0, op: 0.72 },
-    blue  : { c: 0x4a9eff, e: 0x1a3a70, ei: 0.35, op: 1.0 },
-    red   : { c: 0xff4a6e, e: 0x701a30, ei: 0.35, op: 1.0 },
+    empty : { c: 0x1a1a40, e: 0x000000, ei: 0.0,  op: 0.28 },
+    blue  : { c: 0x4a9eff, e: 0x1a3a70, ei: 0.45, op: 0.92 },
+    red   : { c: 0xff4a6e, e: 0x701a30, ei: 0.45, op: 0.92 },
   };
 
   const $ = id => document.getElementById(id);
@@ -71,6 +72,30 @@ window.Game3D = (() => {
   }
 
   const cap = (x, y, z, N) => nbrs(x, y, z, N).length;
+
+  // Returns normalized outward-facing direction for a surface cell
+  function computeOutDir(x, y, z, N) {
+    let ox = 0, oy = 0, oz = 0;
+    if (x === 0)   ox -= 1;
+    if (x === N-1) ox += 1;
+    if (y === 0)   oy -= 1;
+    if (y === N-1) oy += 1;
+    if (z === 0)   oz -= 1;
+    if (z === N-1) oz += 1;
+    const len = Math.sqrt(ox*ox + oy*oy + oz*oz);
+    return [ox/len, oy/len, oz/len];
+  }
+
+  // Returns two perpendicular unit vectors to n (for face-plane dot layout)
+  function perpAxes(n) {
+    let u = Math.abs(n[1]) > 0.9 ? [1, 0, 0] : [0, 1, 0];
+    const d = u[0]*n[0] + u[1]*n[1] + u[2]*n[2];
+    u = [u[0] - d*n[0], u[1] - d*n[1], u[2] - d*n[2]];
+    const ul = Math.sqrt(u[0]**2 + u[1]**2 + u[2]**2);
+    u = u.map(v => v/ul);
+    const v = [n[1]*u[2] - n[2]*u[1], n[2]*u[0] - n[0]*u[2], n[0]*u[1] - n[1]*u[0]];
+    return [u, v];
+  }
 
   // ── Scene setup ────────────────────────────────────────────────────────────
 
@@ -211,7 +236,7 @@ window.Game3D = (() => {
       });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(x * SPACING - off, y * SPACING - off, z * SPACING - off);
-      mesh.userData = { cx: x, cy: y, cz: z };
+      mesh.userData = { cx: x, cy: y, cz: z, outDir: computeOutDir(x, y, z, N) };
       group.add(mesh);
       cellMeshes.push(mesh);
       dotGroups[key(x, y, z)] = [];
@@ -232,32 +257,35 @@ window.Game3D = (() => {
     mesh.material.emissiveIntensity = col.ei;
     mesh.material.opacity = col.op;
 
-    // Dots
+    // Dots — placed on the outward face of the cell, never inside it
     dotGroups[k].forEach(d => group.remove(d));
     dotGroups[k] = [];
     if (!cell.p || cell.n <= 0) return;
 
+    // 2-D layout on face plane: [along-u, along-v] offsets
     const DOT_POS = {
-      1: [[0, 0, 0]],
-      2: [[-0.23, 0, 0], [0.23, 0, 0]],
-      3: [[-0.22, 0.18, 0], [0.22, 0.18, 0], [0, -0.2, 0]],
+      1: [[0, 0]],
+      2: [[-0.26, 0], [0.26, 0]],
+      3: [[-0.23, 0.2], [0.23, 0.2], [0, -0.22]],
     };
-    const positions = DOT_POS[Math.min(cell.n, 3)];
-    if (!positions) return;
+    const facePos = DOT_POS[Math.min(cell.n, 3)];
+    if (!facePos) return;
 
-    const fill   = cell.p === 'blue' ? 0x4a9eff : 0xff4a6e;
+    const fill     = cell.p === 'blue' ? 0x4a9eff : 0xff4a6e;
     const emissive = cell.p === 'blue' ? 0x2255bb : 0xbb2244;
-    const dotGeo = new THREE.SphereGeometry(CSIZE * 0.14, 10, 10);
+    const dotGeo   = new THREE.SphereGeometry(CSIZE * 0.14, 10, 10);
+    const outDir   = mesh.userData.outDir || [0, 0, 1];
+    const [ua, va] = perpAxes(outDir);
 
-    for (const [dx, dy, dz] of positions) {
+    for (const [du, dv] of facePos) {
       const dotMat = new THREE.MeshStandardMaterial({
-        color: fill, emissive, emissiveIntensity: 0.65, roughness: 0.2,
+        color: fill, emissive, emissiveIntensity: 0.7, roughness: 0.2,
       });
       const dot = new THREE.Mesh(dotGeo, dotMat);
       dot.position.set(
-        mesh.position.x + dx * CSIZE,
-        mesh.position.y + dy * CSIZE,
-        mesh.position.z + dz * CSIZE,
+        mesh.position.x + outDir[0]*DOT_PUSH + ua[0]*du*CSIZE + va[0]*dv*CSIZE,
+        mesh.position.y + outDir[1]*DOT_PUSH + ua[1]*du*CSIZE + va[1]*dv*CSIZE,
+        mesh.position.z + outDir[2]*DOT_PUSH + ua[2]*du*CSIZE + va[2]*dv*CSIZE,
       );
       group.add(dot);
       dotGroups[k].push(dot);
