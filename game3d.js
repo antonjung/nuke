@@ -32,10 +32,13 @@ window.Game3D = (() => {
   let rafId = null;
   let ready = false;
 
-  // Auto-rotation: lerp current speed toward target for smooth ease-in/out
-  let autoRotCur = 0;
-  let autoRotTarget = 0;
-  const AUTO_ROT_SPEED = 0.009; // rad/frame at 60 fps ≈ 31°/sec
+  // Targeted rotation: lerp rotX/rotY toward a target point each frame
+  let rotXTarget = 0.35;
+  let rotYTarget = 0.6;
+  let targeting  = false; // true during chain reactions
+
+  // Critical cells: key → { mesh, edges, baseEI }; pulsed every frame in the render loop
+  const criticalSet = new Map();
 
   const SPACING = 1.08;
   const CSIZE   = 0.9;
@@ -90,6 +93,13 @@ window.Game3D = (() => {
 
   const cap = (x, y, z, N) => nbrs(x, y, z, N).length;
 
+  // Normalise angle to [-π, π] so rotation lerp always takes the short path
+  function normAngle(a) {
+    while (a >  Math.PI) a -= 2 * Math.PI;
+    while (a < -Math.PI) a += 2 * Math.PI;
+    return a;
+  }
+
   // ── Scene setup ────────────────────────────────────────────────────────────
 
   async function loadThree() {
@@ -133,12 +143,26 @@ window.Game3D = (() => {
 
     function loop() {
       rafId = requestAnimationFrame(loop);
-      // Smooth auto-rotation: ease current speed toward target
-      autoRotCur += (autoRotTarget - autoRotCur) * 0.06;
-      if (Math.abs(autoRotCur) > 0.00005) {
-        rotY += autoRotCur;
+
+      // Targeted rotation: smoothly pivot toward the explosion point
+      if (targeting) {
+        const dx = rotXTarget - rotX;
+        const dy = normAngle(rotYTarget - rotY);
+        rotX += dx * 0.07;
+        rotY += dy * 0.07;
+        group.rotation.x = rotX;
         group.rotation.y = rotY;
       }
+
+      // Critical cell pulse: orange edges + emissive glow at ~0.9 Hz
+      if (criticalSet.size) {
+        const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.0057);
+        for (const { mesh, edges, baseEI } of criticalSet.values()) {
+          if (mesh.material) mesh.material.emissiveIntensity = baseEI + pulse * 0.55;
+          if (edges?.material) edges.material.opacity = 0.35 + pulse * 0.65;
+        }
+      }
+
       renderer.render(scene, camera);
     }
     loop();
@@ -174,8 +198,7 @@ window.Game3D = (() => {
     el.addEventListener('pointerdown', e => {
       pDown = true; pMoved = false;
       px = e.clientX; py = e.clientY;
-      // Pause auto-rotation while dragging
-      autoRotTarget = 0;
+      targeting = false; // user takes control
       el.setPointerCapture(e.pointerId);
     });
 
@@ -228,6 +251,7 @@ window.Game3D = (() => {
     cellMeshes = [];
     edgeMeshes = [];
     dotGroups = {};
+    criticalSet.clear();
 
     const N = G.N;
     const off = (N - 1) / 2 * SPACING;
@@ -246,14 +270,14 @@ window.Game3D = (() => {
       const mesh = new THREE.Mesh(boxGeo, mat);
       const pos = [x * SPACING - off, y * SPACING - off, z * SPACING - off];
       mesh.position.set(...pos);
-      mesh.userData = { cx: x, cy: y, cz: z };
-      group.add(mesh);
-      cellMeshes.push(mesh);
-
       const edges = new THREE.LineSegments(edgeGeo, edgeMat.clone());
       edges.position.set(...pos);
       group.add(edges);
       edgeMeshes.push(edges);
+
+      mesh.userData = { cx: x, cy: y, cz: z, edges };
+      group.add(mesh);
+      cellMeshes.push(mesh);
 
       dotGroups[key(x, y, z)] = [];
     }
@@ -274,8 +298,24 @@ window.Game3D = (() => {
     const col = cell.p ? COL[cell.p] : COL.empty;
     mesh.material.color.setHex(col.c);
     mesh.material.emissive.setHex(col.e);
-    mesh.material.emissiveIntensity = col.ei;
     mesh.material.opacity = col.op;
+
+    const edges = mesh.userData.edges;
+    const isCritical = cell.p && cell.n > 0 && cell.n === cap(x, y, z, G.N) - 1;
+
+    if (isCritical) {
+      if (!criticalSet.has(k)) {
+        criticalSet.set(k, { mesh, edges, baseEI: col.ei });
+        if (edges?.material) edges.material.color.setHex(0xff8800);
+      }
+      // emissiveIntensity handled by render loop pulse — don't set here
+    } else {
+      if (criticalSet.has(k)) {
+        criticalSet.delete(k);
+        if (edges?.material) { edges.material.color.setHex(0x4455cc); edges.material.opacity = 0.45; }
+      }
+      mesh.material.emissiveIntensity = col.ei;
+    }
 
     dotGroups[k].forEach(d => group.remove(d));
     dotGroups[k] = [];
@@ -330,7 +370,9 @@ window.Game3D = (() => {
   // Big slow pulse for exploding cells
   const flashExplode  = meshes => animatePulse(meshes, 600, 0.55, 1.8);
   // Smaller quick pulse for cells that just received counters
-  const flashReceive  = meshes => animatePulse(meshes, 300, 0.18, 0.9);
+  const flashReceive  = meshes => animatePulse(meshes, 280, 0.14, 0.7);
+  // Bright white-ish flash for cells that changed owner
+  const flashCapture  = meshes => animatePulse(meshes, 380, 0.1,  1.5);
 
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -343,7 +385,7 @@ window.Game3D = (() => {
 
     if (ok && G.epoch === epoch && G.aiMode && G.turn === 'red') {
       $('red-ind').classList.add('thinking');
-      await sleep(350 + Math.random() * 350);
+      await sleep(1200 + Math.random() * 1400);
       $('red-ind').classList.remove('thinking');
       if (G.epoch === epoch && !G.over) {
         const move = aiPick();
@@ -377,23 +419,42 @@ window.Game3D = (() => {
     return true;
   }
 
+  // Compute the group-space centroid of a wave and aim the camera at it
+  function aimAtWave(wave, N) {
+    const off = (N - 1) / 2 * SPACING;
+    let wx = 0, wy = 0, wz = 0;
+    for (const [x, y, z] of wave) {
+      wx += x * SPACING - off;
+      wy += y * SPACING - off;
+      wz += z * SPACING - off;
+    }
+    wx /= wave.length; wy /= wave.length; wz /= wave.length;
+    // Spherical → Euler: bring the centroid direction to face +Z (camera)
+    rotYTarget = -Math.atan2(wx, wz);
+    rotXTarget = Math.max(-1.1, Math.min(1.1,
+      Math.atan2(wy, Math.sqrt(wx * wx + wz * wz))
+    ));
+    targeting = true;
+  }
+
   async function processChain(initial) {
     const epoch = G.epoch;
     const N = G.N;
     let wave = dedup(initial);
 
-    // Start revolving the cube so all sides become visible
-    autoRotTarget = AUTO_ROT_SPEED;
-
     while (wave.length) {
-      if (G.epoch !== epoch) { autoRotTarget = 0; return; }
+      if (G.epoch !== epoch) { targeting = false; return; }
 
-      // 1 — animate exploding cells with a big slow pulse
+      // 1 — pivot to face the exploding cells, then animate them
+      aimAtWave(wave, N);
       const waveMeshes = wave.map(([x,y,z]) => getMesh(x, y, z)).filter(Boolean);
       await flashExplode(waveMeshes);
-      if (G.epoch !== epoch) { autoRotTarget = 0; return; }
+      if (G.epoch !== epoch) { targeting = false; return; }
 
-      // 2 — collect neighbour cells before applying logic
+      // 2 — snapshot owners and collect receiver keys before applying logic
+      const prevOwner = {};
+      for (const [x,y,z] of G.surface) prevOwner[key(x,y,z)] = G.cells[key(x,y,z)].p;
+
       const receiverKeys = new Set();
       const toExplode = wave.filter(([x,y,z]) => {
         const c = G.cells[key(x,y,z)];
@@ -419,16 +480,22 @@ window.Game3D = (() => {
         }
       }
 
-      renderAll();
+      renderAll();   // updates criticalSet for newly-critical cells
       updateHUD();
-      if (checkWin()) { autoRotTarget = 0; return; }
+      if (checkWin()) { targeting = false; return; }
 
-      // 4 — small pulse on cells that just received counters
-      const recvMeshes = [...receiverKeys]
-        .map(k => { const [x,y,z] = k.split(',').map(Number); return getMesh(x,y,z); })
-        .filter(Boolean);
-      await flashReceive(recvMeshes);
-      if (G.epoch !== epoch) { autoRotTarget = 0; return; }
+      // 4 — separate captured (owner changed) from plain-received; flash both in parallel
+      const capturedMeshes = [];
+      const recvOnlyMeshes = [];
+      for (const k of receiverKeys) {
+        const [x,y,z] = k.split(',').map(Number);
+        const m = getMesh(x, y, z);
+        if (!m) continue;
+        if (G.cells[k].p && G.cells[k].p !== prevOwner[k]) capturedMeshes.push(m);
+        else recvOnlyMeshes.push(m);
+      }
+      await Promise.all([flashCapture(capturedMeshes), flashReceive(recvOnlyMeshes)]);
+      if (G.epoch !== epoch) { targeting = false; return; }
 
       wave = [];
       for (const [x,y,z] of G.surface)
@@ -436,8 +503,7 @@ window.Game3D = (() => {
       wave = dedup(wave);
     }
 
-    // Ease the rotation back to stopped
-    autoRotTarget = 0;
+    targeting = false;
   }
 
   function dedup(cells) {
@@ -564,7 +630,7 @@ window.Game3D = (() => {
   async function aiOpeningMove(epoch) {
     G.busy = true;
     $('red-ind').classList.add('thinking');
-    await sleep(500 + Math.random() * 400);
+    await sleep(1000 + Math.random() * 1200);
     $('red-ind').classList.remove('thinking');
     if (G.epoch !== epoch || G.over) { G.busy = false; return; }
     const move = aiPick();
@@ -586,8 +652,8 @@ window.Game3D = (() => {
     G.surface = buildSurface(N);
     G.cells = {};
     for (const [x,y,z] of G.surface) G.cells[key(x,y,z)] = { p: null, n: 0 };
-    autoRotTarget = 0;
-    autoRotCur    = 0;
+    targeting = false;
+    criticalSet.clear();
     $('red-ind').classList.remove('thinking');
     $('win-modal').classList.add('hidden');
   }

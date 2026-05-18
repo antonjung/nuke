@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = '2.0.0';
+const VERSION = '2.2.0';
 
 // ── Dot layout (viewBox 0-100) ──────────────────────────────────────────────
 const DOT_POSITIONS = {
@@ -122,9 +122,9 @@ function renderCell(r, c) {
   const el   = cellEl(r, c);
   if (!el) return;
 
-  // Preserve animation classes while updating colour class
-  const animCls = [...el.classList].filter(k => k === 'exploding' || k === 'receiving');
-  el.className  = ['cell', data.p || '', ...animCls].filter(Boolean).join(' ');
+  const isCritical = data.p && data.n > 0 && data.n === capacity(r, c) - 1;
+  const animCls = [...el.classList].filter(k => k === 'exploding' || k === 'receiving' || k === 'capturing');
+  el.className  = ['cell', data.p || '', isCritical ? 'critical' : '', ...animCls].filter(Boolean).join(' ');
 
   el.querySelectorAll('.dots-svg').forEach(s => s.remove());
 
@@ -222,9 +222,12 @@ async function processChain(initial) {
     await animateWave(wave);
     if (G.epoch !== myEpoch) return;
 
+    // Snapshot owners before applying logic so we can detect captures
+    const prevOwner = G.grid.map(row => row.map(cell => cell.p));
+
     for (const [r, c] of wave) {
       const cell = G.grid[r][c];
-      if (cell.n < capacity(r, c)) continue; // guard: already drained
+      if (cell.n < capacity(r, c)) continue;
 
       const player = cell.p;
       const nbrs   = neighbors(r, c);
@@ -241,7 +244,21 @@ async function processChain(initial) {
     renderAll();
     updateHUD();
 
-    if (checkWin()) return; // one player eliminated — stop chain
+    if (checkWin()) return;
+
+    // Flash cells that changed owner (newly captured)
+    for (let r = 0; r < G.size; r++) {
+      for (let c = 0; c < G.size; c++) {
+        const el = cellEl(r, c);
+        const cur = G.grid[r][c].p;
+        if (el && cur && cur !== prevOwner[r][c]) {
+          el.classList.remove('capturing');
+          void el.offsetWidth; // restart animation if already playing
+          el.classList.add('capturing');
+          setTimeout(() => el.classList.remove('capturing'), 440);
+        }
+      }
+    }
 
     // Collect next wave
     const next = [];
@@ -433,7 +450,7 @@ async function onCellClick(e) {
 
   if (ok && G.epoch === myEpoch && G.aiMode && G.turn === 'red') {
     $('red-ind').classList.add('thinking');
-    await sleep(350 + Math.random() * 350);
+    await sleep(1200 + Math.random() * 1400);
     $('red-ind').classList.remove('thinking');
 
     if (G.epoch === myEpoch && !G.over) {
@@ -502,7 +519,7 @@ function newGame() {
 async function aiOpeningMove(epoch) {
   G.busy = true;
   $('red-ind').classList.add('thinking');
-  await sleep(500 + Math.random() * 400);
+  await sleep(1000 + Math.random() * 1200);
   $('red-ind').classList.remove('thinking');
   if (G.epoch !== epoch || G.over) { G.busy = false; return; }
   const move = aiPickMove();
