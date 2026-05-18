@@ -19,7 +19,10 @@
   <div id="app">
 
     <header>
-      <h1>NUKE</h1>
+      <div id="title-group">
+        <h1>NUKE</h1>
+        <span id="version"></span>
+      </div>
       <div id="hud">
         <div class="player-ind" id="blue-ind">
           <div class="p-orb blue-orb"></div>
@@ -44,6 +47,19 @@
     </main>
 
     <footer>
+      <label for="mode">Mode</label>
+      <select id="mode">
+        <option value="2p">2 Players</option>
+        <option value="ai" selected>vs Computer</option>
+      </select>
+      <span id="difficulty-wrap">
+        <label for="difficulty">Level</label>
+        <select id="difficulty">
+          <option value="easy">Easy</option>
+          <option value="medium" selected>Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+      </span>
       <label for="grid-size">Grid</label>
       <select id="grid-size">
         <option value="4">4 × 4</option>

@@ -67,6 +67,23 @@ h1 {
   user-select: none;
 }
 
+#version {
+  font-size: 0.62rem;
+  color: var(--text-dim);
+  opacity: 0.5;
+  letter-spacing: 0.04em;
+  align-self: flex-end;
+  padding-bottom: 2px;
+  margin-left: -6px;
+}
+
+#title-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+
 /* HUD */
 #hud {
   display: flex;
@@ -357,6 +374,22 @@ button:active { transform: scale(0.96); }
 #win-label.red  { color: var(--red);  text-shadow: 0 0 20px var(--red-glow);  }
 
 #play-again { padding: 11px 36px; font-size: 0.95rem; }
+
+/* AI thinking indicator */
+@keyframes ai-thinking {
+  0%, 100% { box-shadow: 0 0 14px var(--red-glow); opacity: 1; }
+  50%       { box-shadow: 0 0 32px var(--red), 0 0 60px var(--red-glow); opacity: 0.75; }
+}
+
+#red-ind.thinking {
+  animation: ai-thinking 0.65s ease-in-out infinite;
+}
+
+#difficulty-wrap {
+  display: contents;
+}
+
+footer { flex-wrap: wrap; }
 
 /* ── Responsive tweaks ─────────────────────────────────────────────────────── */
 @media (max-width: 380px) {

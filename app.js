@@ -1,5 +1,7 @@
 'use strict';
 
+const VERSION = '1.1.0';
+
 // ── Dot layout (viewBox 0-100) ──────────────────────────────────────────────
 const DOT_POSITIONS = {
   1: [[50, 50]],
@@ -16,6 +18,8 @@ let G = {
   busy: false,
   played: { blue: false, red: false },
   epoch: 0,        // incremented on newGame to cancel stale coroutines
+  aiMode: true,
+  aiDifficulty: 'medium',
 };
 
 // ── Grid logic ───────────────────────────────────────────────────────────────
@@ -146,6 +150,8 @@ function updateHUD() {
   $('blue-ind').classList.toggle('active', G.turn === 'blue');
   $('red-ind').classList.toggle('active',  G.turn === 'red');
 
+  document.querySelector('#red-ind .p-name').textContent = G.aiMode ? 'CPU' : 'Red';
+
   const hud = $('hud');
   hud.classList.toggle('red-turn', G.turn === 'red');
 }
@@ -247,21 +253,143 @@ async function processChain(initial) {
   }
 }
 
-// ── Click handler ─────────────────────────────────────────────────────────────
+// ── AI ────────────────────────────────────────────────────────────────────────
 
-async function onCellClick(e) {
-  if (G.over || G.busy) return;
+function cloneGrid(grid) {
+  return grid.map(row => row.map(cell => ({ ...cell })));
+}
 
-  const r    = +e.currentTarget.dataset.r;
-  const c    = +e.currentTarget.dataset.c;
-  const cell = G.grid[r][c];
+function simulateMove(grid, size, player, r, c) {
+  const g = cloneGrid(grid);
+  g[r][c].p = player;
+  g[r][c].n++;
 
-  if (cell.p && cell.p !== G.turn) return;
+  const nbrs = (rr, cc) => {
+    const a = [];
+    if (rr > 0)      a.push([rr - 1, cc]);
+    if (rr < size-1) a.push([rr + 1, cc]);
+    if (cc > 0)      a.push([rr, cc - 1]);
+    if (cc < size-1) a.push([rr, cc + 1]);
+    return a;
+  };
+  const cap = (rr, cc) => nbrs(rr, cc).length;
 
+  let wave = g[r][c].n >= cap(r, c) ? [[r, c]] : [];
+
+  for (let iter = 0; iter < 500 && wave.length; iter++) {
+    const toExplode = wave.filter(([rr, cc]) => g[rr][cc].n >= cap(rr, cc));
+    if (!toExplode.length) break;
+
+    for (const [rr, cc] of toExplode) {
+      const cell = g[rr][cc];
+      if (cell.n < cap(rr, cc)) continue;
+      const pl = cell.p;
+      const ns = nbrs(rr, cc);
+      cell.n -= ns.length;
+      if (cell.n <= 0) { cell.n = 0; cell.p = null; }
+      for (const [nr, nc] of ns) { g[nr][nc].n++; g[nr][nc].p = pl; }
+    }
+
+    const live = g.flat().filter(cell => cell.n > 0);
+    if (new Set(live.map(cell => cell.p)).size === 1) break;
+
+    wave = [];
+    for (let rr = 0; rr < size; rr++)
+      for (let cc = 0; cc < size; cc++)
+        if (g[rr][cc].n >= cap(rr, cc)) wave.push([rr, cc]);
+  }
+
+  return g;
+}
+
+function evaluateGrid(grid, size, player) {
+  const cap = (r, c) => {
+    let n = 0;
+    if (r > 0) n++; if (r < size-1) n++;
+    if (c > 0) n++; if (c < size-1) n++;
+    return n;
+  };
+  let myCounters = 0, oppCounters = 0, myCells = 0, oppCells = 0;
+  let myNearFull = 0, oppNearFull = 0;
+
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
+      const cell = grid[r][c];
+      if (!cell.p || cell.n === 0) continue;
+      const cellCap = cap(r, c);
+      if (cell.p === player) {
+        myCounters += cell.n; myCells++;
+        if (cell.n >= cellCap - 1) myNearFull++;
+      } else {
+        oppCounters += cell.n; oppCells++;
+        if (cell.n >= cellCap - 1) oppNearFull++;
+      }
+    }
+  }
+
+  if (myCells > 0 && oppCells === 0) return 100000;
+  if (myCells === 0 && oppCells > 0) return -100000;
+
+  return (myCounters - oppCounters) * 10
+       + (myCells   - oppCells)     * 5
+       + (myNearFull - oppNearFull) * 8;
+}
+
+function getValidMoves(grid, size, player) {
+  const moves = [];
+  for (let r = 0; r < size; r++)
+    for (let c = 0; c < size; c++)
+      if (!grid[r][c].p || grid[r][c].p === player)
+        moves.push([r, c]);
+  return moves;
+}
+
+function aiPickMove() {
+  const player  = 'red';
+  const opp     = 'blue';
+  const moves   = getValidMoves(G.grid, G.size, player);
+  if (!moves.length) return null;
+
+  if (G.aiDifficulty === 'easy') {
+    return moves[Math.floor(Math.random() * moves.length)];
+  }
+
+  let best = -Infinity;
+  let bestMoves = [];
+
+  for (const [r, c] of moves) {
+    const result = simulateMove(G.grid, G.size, player, r, c);
+    let score = evaluateGrid(result, G.size, player);
+
+    if (G.aiDifficulty === 'hard') {
+      const oppMoves = getValidMoves(result, G.size, opp);
+      const sample = oppMoves.length > 8
+        ? oppMoves.sort(() => Math.random() - 0.5).slice(0, 8)
+        : oppMoves;
+      if (sample.length) {
+        let worst = Infinity;
+        for (const [or, oc] of sample) {
+          const s = evaluateGrid(simulateMove(result, G.size, opp, or, oc), G.size, player);
+          if (s < worst) worst = s;
+        }
+        score = worst;
+      }
+    }
+
+    if (score > best) { best = score; bestMoves = [[r, c]]; }
+    else if (score === best) bestMoves.push([r, c]);
+  }
+
+  return bestMoves[Math.floor(Math.random() * bestMoves.length)];
+}
+
+// ── Turn execution ────────────────────────────────────────────────────────────
+
+async function executeTurn(r, c) {
   const myEpoch = G.epoch;
-  G.busy = true;
   G.played[G.turn] = true;
 
+  const cell = G.grid[r][c];
   cell.p = G.turn;
   cell.n++;
 
@@ -272,18 +400,49 @@ async function onCellClick(e) {
     await processChain([[r, c]]);
   }
 
-  if (G.epoch !== myEpoch) return; // game was reset during chain reaction
+  if (G.epoch !== myEpoch) return false;
 
   const winner = checkWin();
   if (winner) {
     G.over = true;
     showWin(winner);
-  } else {
-    G.turn = G.turn === 'blue' ? 'red' : 'blue';
-    updateHUD();
+    return false;
   }
 
-  G.busy = false;
+  G.turn = G.turn === 'blue' ? 'red' : 'blue';
+  updateHUD();
+  return true;
+}
+
+// ── Click handler ─────────────────────────────────────────────────────────────
+
+async function onCellClick(e) {
+  if (G.over || G.busy) return;
+  if (G.aiMode && G.turn !== 'blue') return;
+
+  const r    = +e.currentTarget.dataset.r;
+  const c    = +e.currentTarget.dataset.c;
+  const cell = G.grid[r][c];
+
+  if (cell.p && cell.p !== G.turn) return;
+
+  G.busy = true;
+  const myEpoch = G.epoch;
+
+  let ok = await executeTurn(r, c);
+
+  if (ok && G.epoch === myEpoch && G.aiMode && G.turn === 'red') {
+    $('red-ind').classList.add('thinking');
+    await sleep(350 + Math.random() * 350);
+    $('red-ind').classList.remove('thinking');
+
+    if (G.epoch === myEpoch && !G.over) {
+      const move = aiPickMove();
+      if (move) ok = await executeTurn(move[0], move[1]);
+    }
+  }
+
+  if (G.epoch === myEpoch) G.busy = false;
 }
 
 // ── Win screen ───────────────────────────────────────────────────────────────
@@ -293,7 +452,11 @@ function showWin(player) {
   const label = $('win-label');
   orb.className   = player;
   label.className = player;
-  label.textContent = player === 'blue' ? 'Blue Wins!' : 'Red Wins!';
+  if (G.aiMode) {
+    label.textContent = player === 'blue' ? 'You Win!' : 'CPU Wins!';
+  } else {
+    label.textContent = player === 'blue' ? 'Blue Wins!' : 'Red Wins!';
+  }
   $('win-modal').classList.remove('hidden');
 }
 
@@ -301,13 +464,16 @@ function showWin(player) {
 
 function newGame() {
   G.epoch++;
-  G.size   = +$('grid-size').value;
-  G.grid   = mkGrid(G.size);
-  G.turn   = 'blue';
-  G.over   = false;
-  G.busy   = false;
-  G.played = { blue: false, red: false };
+  G.size          = +$('grid-size').value;
+  G.aiMode        = $('mode').value === 'ai';
+  G.aiDifficulty  = $('difficulty').value;
+  G.grid          = mkGrid(G.size);
+  G.turn          = 'blue';
+  G.over          = false;
+  G.busy          = false;
+  G.played        = { blue: false, red: false };
 
+  $('red-ind').classList.remove('thinking');
   $('win-modal').classList.add('hidden');
   buildGrid();
   renderAll();
@@ -319,6 +485,11 @@ function newGame() {
 $('new-game').addEventListener('click', newGame);
 $('play-again').addEventListener('click', newGame);
 $('grid-size').addEventListener('change', newGame);
+$('mode').addEventListener('change', () => {
+  $('difficulty-wrap').style.display = $('mode').value === 'ai' ? '' : 'none';
+  newGame();
+});
+$('difficulty').addEventListener('change', newGame);
 
 let resizeTimer;
 window.addEventListener('resize', () => {
@@ -334,4 +505,7 @@ if ('serviceWorker' in navigator) {
   );
 }
 
-document.addEventListener('DOMContentLoaded', newGame);
+document.addEventListener('DOMContentLoaded', () => {
+  $('version').textContent = `v${VERSION}`;
+  newGame();
+});
