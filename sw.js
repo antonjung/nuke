@@ -1,12 +1,14 @@
 'use strict';
 
-const CACHE = 'nuke-v1.6.0'; // bump this whenever VERSION in app.js changes
+const CACHE = 'nuke-v1.7.0'; // bump this whenever VERSION in app.js changes
 const ASSETS = [
   './index.html',
   './styles.css',
   './app.js',
+  './game3d.js',
   './manifest.json',
   './icons/icon.svg',
+  'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js',
 ];
 
 self.addEventListener('install', e => {

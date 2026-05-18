@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = '1.6.0';
+const VERSION = '1.7.0';
 
 // ── Dot layout (viewBox 0-100) ──────────────────────────────────────────────
 const DOT_POSITIONS = {
@@ -462,26 +462,41 @@ function showWin(player) {
 
 // ── New game ──────────────────────────────────────────────────────────────────
 
+function aiOpts() {
+  const mode = $('mode').value;
+  const aiMode = mode !== '2p';
+  const turn = (aiMode && $('first-move').value === 'red') ? 'red' : 'blue';
+  return { mode, aiMode, aiDifficulty: mode, turn };
+}
+
 function newGame() {
+  $('win-modal').classList.add('hidden');
+
+  if ($('board').value === '3d') {
+    if (window.Game3D && Game3D.isReady()) {
+      const { aiMode, aiDifficulty, turn } = aiOpts();
+      Game3D.newRound({ N: +$('cube-size').value, aiMode, aiDifficulty, turn });
+    }
+    return;
+  }
+
+  const { aiMode, aiDifficulty, turn } = aiOpts();
   G.epoch++;
   G.size          = +$('grid-size').value;
-  const mode      = $('mode').value;
-  G.aiMode        = mode !== '2p';
-  G.aiDifficulty  = mode; // 'easy' | 'medium' | 'hard' (ignored when '2p')
-  const redFirst  = G.aiMode && $('first-move').value === 'red';
-  G.turn          = redFirst ? 'red' : 'blue';
+  G.aiMode        = aiMode;
+  G.aiDifficulty  = aiDifficulty;
+  G.turn          = turn;
   G.grid          = mkGrid(G.size);
   G.over          = false;
   G.busy          = false;
   G.played        = { blue: false, red: false };
 
   $('red-ind').classList.remove('thinking');
-  $('win-modal').classList.add('hidden');
   buildGrid();
   renderAll();
   updateHUD();
 
-  if (redFirst) aiOpeningMove(G.epoch);
+  if (turn === 'red') aiOpeningMove(G.epoch);
 }
 
 async function aiOpeningMove(epoch) {
@@ -500,6 +515,33 @@ async function aiOpeningMove(epoch) {
 $('new-game').addEventListener('click', newGame);
 $('play-again').addEventListener('click', newGame);
 $('grid-size').addEventListener('change', newGame);
+$('cube-size').addEventListener('change', newGame);
+
+$('board').addEventListener('change', () => {
+  const is3D = $('board').value === '3d';
+  $('grid-wrapper').classList.toggle('hidden', is3D);
+  $('game3d-wrapper').classList.toggle('hidden', !is3D);
+  $('grid-size').style.display  = is3D ? 'none' : '';
+  $('cube-size').style.display  = is3D ? ''     : 'none';
+  if (is3D) {
+    start3D();
+  } else {
+    newGame();
+  }
+});
+
+async function start3D() {
+  const { aiMode, aiDifficulty, turn } = aiOpts();
+  const ok = await Game3D.start($('game3d-wrapper'), {
+    N: +$('cube-size').value, aiMode, aiDifficulty, turn,
+  });
+  if (!ok) {
+    $('board').value = '2d';
+    $('board').dispatchEvent(new Event('change'));
+    alert('3D mode requires an internet connection to load Three.js.');
+  }
+}
+
 $('mode').addEventListener('change', () => {
   $('first-move').style.display = $('mode').value !== '2p' ? '' : 'none';
   newGame();

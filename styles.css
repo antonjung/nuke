@@ -205,6 +205,23 @@ select {
 
 select:focus { border-color: var(--blue); }
 
+/* ── 3D wrapper ────────────────────────────────────────────────────────────── */
+#game3d-wrapper {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  background: var(--bg);
+}
+
+#game3d-wrapper canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  touch-action: none;
+}
+
+#game3d-wrapper.hidden { display: none; }
+
 /* ── Main / Grid ───────────────────────────────────────────────────────────── */
 main#grid-wrapper {
   flex: 1;
@@ -214,6 +231,8 @@ main#grid-wrapper {
   padding: 14px;
   overflow: hidden;
 }
+
+main#grid-wrapper.hidden { display: none; }
 
 #grid {
   display: grid;

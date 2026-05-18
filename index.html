@@ -42,6 +42,10 @@
     </header>
 
     <div id="options-bar">
+      <select id="board" aria-label="Board type">
+        <option value="2d" selected>2D</option>
+        <option value="3d">3D</option>
+      </select>
       <select id="mode" aria-label="Game mode">
         <option value="2p">vs Human</option>
         <option value="easy">AI (Easy)</option>
@@ -60,7 +64,13 @@
         <option value="10">10 × 10</option>
         <option value="12">12 × 12</option>
       </select>
+      <select id="cube-size" aria-label="Cube size" style="display:none">
+        <option value="3" selected>3 × 3 × 3</option>
+        <option value="4">4 × 4 × 4</option>
+      </select>
     </div>
+
+    <div id="game3d-wrapper" class="hidden"></div>
 
     <main id="grid-wrapper">
       <div id="grid"></div>
@@ -96,6 +106,7 @@
     </div>
   </div>
 
+  <script src="game3d.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
