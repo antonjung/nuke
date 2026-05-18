@@ -656,12 +656,10 @@ window.Game3D = (() => {
   }
 
   function showWin(player) {
-    const orb = $('win-orb'), label = $('win-label');
-    orb.className = label.className = player;
-    label.textContent = G.aiMode
-      ? (player === 'blue' ? 'You Win!' : 'CPU Wins!')
-      : (player === 'blue' ? 'Blue Wins!' : 'Red Wins!');
-    $('win-modal').classList.remove('hidden');
+    $(`${player}-ind`).classList.add('won');
+    const arrow = $('turn-arrow');
+    arrow.innerHTML = '&#9733;';
+    arrow.style.color = `var(--${player})`;
   }
 
   // ── AI ─────────────────────────────────────────────────────────────────────
@@ -781,7 +779,11 @@ window.Game3D = (() => {
     criticalSet.clear();
     matAnims.clear();
     $('red-ind').classList.remove('thinking');
-    $('win-modal').classList.add('hidden');
+    $('blue-ind').classList.remove('won');
+    $('red-ind').classList.remove('won');
+    const arrow = $('turn-arrow');
+    arrow.innerHTML = '&#9660;';
+    arrow.style.color = '';
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────

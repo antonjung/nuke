@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = '2.3.3';
+const VERSION = '2.3.4';
 
 // ── Dot layout (viewBox 0-100) ──────────────────────────────────────────────
 const DOT_POSITIONS = {
@@ -465,16 +465,10 @@ async function onCellClick(e) {
 // ── Win screen ───────────────────────────────────────────────────────────────
 
 function showWin(player) {
-  const orb   = $('win-orb');
-  const label = $('win-label');
-  orb.className   = player;
-  label.className = player;
-  if (G.aiMode) {
-    label.textContent = player === 'blue' ? 'You Win!' : 'CPU Wins!';
-  } else {
-    label.textContent = player === 'blue' ? 'Blue Wins!' : 'Red Wins!';
-  }
-  $('win-modal').classList.remove('hidden');
+  $(`${player}-ind`).classList.add('won');
+  const arrow = $('turn-arrow');
+  arrow.innerHTML = '&#9733;';
+  arrow.style.color = `var(--${player})`;
 }
 
 // ── New game ──────────────────────────────────────────────────────────────────
@@ -488,6 +482,11 @@ function aiOpts() {
 
 function newGame() {
   $('win-modal').classList.add('hidden');
+  $('blue-ind').classList.remove('won');
+  $('red-ind').classList.remove('won');
+  const arrow = $('turn-arrow');
+  arrow.innerHTML = '&#9660;';
+  arrow.style.color = '';
 
   if ($('board').value === '3d') {
     if (window.Game3D && Game3D.isReady()) {

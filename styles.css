@@ -471,6 +471,19 @@ button:active { transform: scale(0.96); }
 
 #help-close { display: block; margin: 0 auto; padding: 9px 32px; }
 
+/* ── Win indicator ─────────────────────────────────────────────────────────── */
+@keyframes win-glow-blue {
+  0%, 100% { box-shadow: 0 0 14px var(--blue-glow); }
+  50%       { box-shadow: 0 0 38px var(--blue), 0 0 64px var(--blue-glow); }
+}
+@keyframes win-glow-red {
+  0%, 100% { box-shadow: 0 0 14px var(--red-glow); }
+  50%       { box-shadow: 0 0 38px var(--red),  0 0 64px var(--red-glow); }
+}
+
+#blue-ind.won { opacity: 1; border-color: var(--blue); animation: win-glow-blue 1.4s ease-in-out infinite; }
+#red-ind.won  { opacity: 1; border-color: var(--red);  animation: win-glow-red  1.4s ease-in-out infinite; }
+
 /* ── AI thinking indicator ─────────────────────────────────────────────────── */
 @keyframes ai-thinking {
   0%, 100% { box-shadow: 0 0 14px var(--red-glow); opacity: 1; }
