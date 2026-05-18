@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = '2.3.1';
+const VERSION = '2.3.2';
 
 // ── Dot layout (viewBox 0-100) ──────────────────────────────────────────────
 const DOT_POSITIONS = {
@@ -198,16 +198,16 @@ async function animateCell(r, c) {
         { transform: 'translate(-50%,-50%) scale(1.3)', opacity: 1 },
         { transform: `translate(calc(-50% + ${tx - fx}px), calc(-50% + ${ty - fy}px)) scale(0.55)`, opacity: 0.85 },
       ],
-      { duration: 300, easing: 'cubic-bezier(0.4,0,1,1)' }
+      { duration: Math.round(300 * (window.ANIM_SCALE ?? 1)), easing: 'cubic-bezier(0.4,0,1,1)' }
     ).finished.then(() => {
       p.remove();
       // Flash the receiving cell
       toEl.classList.add('receiving');
-      setTimeout(() => toEl.classList.remove('receiving'), 260);
+      setTimeout(() => toEl.classList.remove('receiving'), Math.round(260 * (window.ANIM_SCALE ?? 1)));
     });
   });
 
-  await Promise.all([sleep(320), ...particleAnims]);
+  await Promise.all([sleep(Math.round(320 * (window.ANIM_SCALE ?? 1))), ...particleAnims]);
   el.classList.remove('exploding');
 }
 
@@ -255,7 +255,7 @@ async function processChain(initial) {
           el.classList.remove('capturing');
           void el.offsetWidth; // restart animation if already playing
           el.classList.add('capturing');
-          setTimeout(() => el.classList.remove('capturing'), 440);
+          setTimeout(() => el.classList.remove('capturing'), Math.round(440 * (window.ANIM_SCALE ?? 1)));
         }
       }
     }
@@ -564,6 +564,19 @@ $('mode').addEventListener('change', () => {
   newGame();
 });
 $('first-move').addEventListener('change', newGame);
+
+function applyAnimScale(s) {
+  const root = document.documentElement.style;
+  root.setProperty('--anim-explode', `${Math.round(320 * s)}ms`);
+  root.setProperty('--anim-recv',    `${Math.round(260 * s)}ms`);
+  root.setProperty('--anim-capture', `${Math.round(420 * s)}ms`);
+}
+
+window.ANIM_SCALE = 1;
+$('anim-speed').addEventListener('change', () => {
+  window.ANIM_SCALE = parseFloat($('anim-speed').value);
+  applyAnimScale(window.ANIM_SCALE);
+});
 
 $('help-btn').addEventListener('click', () => $('help-modal').classList.remove('hidden'));
 $('help-close').addEventListener('click', () => $('help-modal').classList.add('hidden'));

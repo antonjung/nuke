@@ -19,6 +19,7 @@
   --radius: 6px;
   --anim-explode: 320ms;
   --anim-recv: 260ms;
+  --anim-capture: 420ms;
 }
 
 /* ── Reset ─────────────────────────────────────────────────────────────────── */
@@ -298,8 +299,8 @@ main#grid-wrapper.hidden { display: none; }
   100% { }
 }
 
-.cell.blue.capturing { animation: capture-flash-blue 420ms ease-out forwards; }
-.cell.red.capturing  { animation: capture-flash-red  420ms ease-out forwards; }
+.cell.blue.capturing { animation: capture-flash-blue var(--anim-capture) ease-out forwards; }
+.cell.red.capturing  { animation: capture-flash-red  var(--anim-capture) ease-out forwards; }
 
 /* ── Explosion animation ───────────────────────────────────────────────────── */
 @keyframes explode-blue {

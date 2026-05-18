@@ -47,6 +47,9 @@ window.Game3D = (() => {
   const SPACING  = 1.08;
   const CSIZE    = 0.9;
 
+  // Scale all animation durations with the global speed setting
+  const T = ms => Math.round(ms * (window.ANIM_SCALE ?? 1));
+
   const COL = {
     empty : { c: 0x1e2055, e: 0x000000, ei: 0.0,  op: 0.18 },
     blue  : { c: 0x4a9eff, e: 0x1a3a70, ei: 0.25, op: 0.52 },
@@ -416,16 +419,16 @@ window.Game3D = (() => {
     });
   }
 
-  const flashExplode = meshes => animatePulse(meshes, 500, 0.55, 1.8);
-  const flashReceive = meshes => animatePulse(meshes, 280, 0.14, 0.7);
-  const flashCapture = meshes => animatePulse(meshes, 360, 0.10, 1.5);
+  const flashExplode = meshes => animatePulse(meshes, T(500), 0.55, 1.8);
+  const flashReceive = meshes => animatePulse(meshes, T(280), 0.14, 0.7);
+  const flashCapture = meshes => animatePulse(meshes, T(360), 0.10, 1.5);
 
   // Animate spheres flying along a bezier arc from exploding cells to their neighbours
   function animateElectrons(toExplode, N) {
     return new Promise(resolve => {
       const flyers = [];
       const t0  = performance.now();
-      const dur = 400;
+      const dur = T(400);
 
       for (const [x, y, z] of toExplode) {
         const cell = G.cells[key(x, y, z)];
@@ -493,8 +496,8 @@ window.Game3D = (() => {
   function wobbleDots(cells) {
     return new Promise(resolve => {
       const t0  = performance.now();
-      const dur = 240;
-      const amp = CSIZE * 0.10;
+      const dur = T(450);
+      const amp = CSIZE * 0.11;
       const entries = [];
       for (const [x, y, z] of cells) {
         for (const dot of (dotGroups[key(x, y, z)] || [])) {
@@ -567,7 +570,7 @@ window.Game3D = (() => {
     updateHUD();
 
     if (cell.n >= cap(x, y, z, N)) {
-      await sleep(150);
+      await sleep(T(150));
       if (G.epoch !== epoch) return false;
       await processChain([[x, y, z]]);
     }
@@ -609,16 +612,21 @@ window.Game3D = (() => {
         for (const [nx,ny,nz] of nbrs(x, y, z, N))
           receiverKeys.add(key(nx, ny, nz));
 
-      // Wobble the dots, then explosion pulse + electron flight in parallel
+      // Wobble dots then launch explosion — don't await flight yet so logic
+      // can run mid-flight and colour transitions overlap with electron travel
       await wobbleDots(toExplode);
       if (G.epoch !== epoch) { targeting = false; return; }
-      await Promise.all([
+
+      const electronFlight = Promise.all([
         flashExplode(waveMeshes),
-        sleep(120).then(() => animateElectrons(toExplode, N)),
+        sleep(T(120)).then(() => animateElectrons(toExplode, N)),
       ]);
+
+      // Apply logic partway through flight so matAnims colour lerp is visible
+      // while electrons are still in the air
+      await sleep(T(250));
       if (G.epoch !== epoch) { targeting = false; return; }
 
-      // Apply explosion logic
       for (const [x,y,z] of toExplode) {
         const cell = G.cells[key(x,y,z)];
         if (!cell || cell.n < cap(x,y,z,N)) continue;
@@ -632,12 +640,11 @@ window.Game3D = (() => {
         }
       }
 
-      // renderCell now starts colour animations instead of snapping instantly
       renderAll();
       updateHUD();
       if (checkWin()) { targeting = false; return; }
 
-      // Flash captured vs plain-received cells in parallel
+      // Identify captured vs plain-received (must be after logic)
       const capturedMeshes = [], recvOnlyMeshes = [];
       for (const k of receiverKeys) {
         const [x,y,z] = k.split(',').map(Number);
@@ -645,6 +652,10 @@ window.Game3D = (() => {
         if (!m) continue;
         (G.cells[k].p && G.cells[k].p !== prevOwner[k] ? capturedMeshes : recvOnlyMeshes).push(m);
       }
+
+      // Wait for electrons to land, then pulse the receiving cells
+      await electronFlight;
+      if (G.epoch !== epoch) { targeting = false; return; }
       await Promise.all([flashCapture(capturedMeshes), flashReceive(recvOnlyMeshes)]);
       if (G.epoch !== epoch) { targeting = false; return; }
 
