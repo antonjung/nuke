@@ -9,8 +9,8 @@ window.Game3D = (() => {
   // ── State ──────────────────────────────────────────────────────────────────
   const G = {
     N: 3,
-    cells: {},         // key 'x,y,z' → { p:'blue'|'red'|null, n:0 }
-    surface: [],       // [[x,y,z], ...]
+    cells: {},
+    surface: [],
     turn: 'blue',
     over: false,
     busy: false,
@@ -25,30 +25,33 @@ window.Game3D = (() => {
   let renderer = null;
   let scene = null;
   let camera = null;
-  let group = null;       // rotating cube group
-  let cellMeshes = [];    // BoxMesh per surface cell
-  let edgeMeshes = [];    // LineSegments per surface cell (wireframe)
-  let dotGroups = {};     // key → [SphereMesh, ...]
+  let group = null;
+  let cellMeshes = [];
+  let edgeMeshes = [];
+  let dotGroups = {};
   let rafId = null;
   let ready = false;
 
-  const SPACING = 1.08;
-  const CSIZE   = 0.9;   // visual cell size
+  // Auto-rotation: lerp current speed toward target for smooth ease-in/out
+  let autoRotCur = 0;
+  let autoRotTarget = 0;
+  const AUTO_ROT_SPEED = 0.009; // rad/frame at 60 fps ≈ 31°/sec
 
-  // Cell colours: transparent enough to see dots inside
+  const SPACING = 1.08;
+  const CSIZE   = 0.9;
+
   const COL = {
     empty : { c: 0x1e2055, e: 0x000000, ei: 0.0,  op: 0.18 },
     blue  : { c: 0x4a9eff, e: 0x1a3a70, ei: 0.25, op: 0.52 },
     red   : { c: 0xff4a6e, e: 0x701a30, ei: 0.25, op: 0.52 },
   };
 
-  // Dot colour — neutral grey, same for both players (cell colour carries ownership)
   const DOT_COLOR    = 0x999999;
   const DOT_EMISSIVE = 0x333333;
   const DOT_EI       = 0.4;
   const DOT_R        = CSIZE * 0.13;
 
-  // Die-face dot offsets in cell-local space (fraction of CSIZE)
+  // Die-face dot offsets in cell-local space
   const DOT_POS = {
     1: [[0,    0,    0   ]],
     2: [[-0.24, 0,   0   ], [0.24,  0,   0   ]],
@@ -115,7 +118,6 @@ window.Game3D = (() => {
     camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 200);
     repositionCamera();
 
-    // Strong ambient so colours are clear from all angles
     scene.add(new THREE.AmbientLight(0xffffff, 0.7));
     const d1 = new THREE.DirectionalLight(0xffffff, 0.8);
     d1.position.set(6, 9, 6);
@@ -129,7 +131,16 @@ window.Game3D = (() => {
     group.rotation.y = 0.6;
     scene.add(group);
 
-    function loop() { rafId = requestAnimationFrame(loop); renderer.render(scene, camera); }
+    function loop() {
+      rafId = requestAnimationFrame(loop);
+      // Smooth auto-rotation: ease current speed toward target
+      autoRotCur += (autoRotTarget - autoRotCur) * 0.06;
+      if (Math.abs(autoRotCur) > 0.00005) {
+        rotY += autoRotCur;
+        group.rotation.y = rotY;
+      }
+      renderer.render(scene, camera);
+    }
     loop();
 
     setupPointer(container);
@@ -163,6 +174,8 @@ window.Game3D = (() => {
     el.addEventListener('pointerdown', e => {
       pDown = true; pMoved = false;
       px = e.clientX; py = e.clientY;
+      // Pause auto-rotation while dragging
+      autoRotTarget = 0;
       el.setPointerCapture(e.pointerId);
     });
 
@@ -209,7 +222,6 @@ window.Game3D = (() => {
   // ── Cell meshes ────────────────────────────────────────────────────────────
 
   function rebuildMeshes() {
-    // Remove old meshes
     cellMeshes.forEach(m => group.remove(m));
     edgeMeshes.forEach(m => group.remove(m));
     Object.values(dotGroups).flat().forEach(m => group.remove(m));
@@ -238,7 +250,6 @@ window.Game3D = (() => {
       group.add(mesh);
       cellMeshes.push(mesh);
 
-      // Wireframe always drawn on top for cube grid visibility
       const edges = new THREE.LineSegments(edgeGeo, edgeMat.clone());
       edges.position.set(...pos);
       group.add(edges);
@@ -266,7 +277,6 @@ window.Game3D = (() => {
     mesh.material.emissiveIntensity = col.ei;
     mesh.material.opacity = col.op;
 
-    // Remove old dots
     dotGroups[k].forEach(d => group.remove(d));
     dotGroups[k] = [];
     if (!cell.p || cell.n <= 0) return;
@@ -275,7 +285,6 @@ window.Game3D = (() => {
     if (!positions) return;
 
     const dotGeo = new THREE.SphereGeometry(DOT_R, 10, 10);
-
     for (const [dx, dy, dz] of positions) {
       const dotMat = new THREE.MeshStandardMaterial({
         color: DOT_COLOR, emissive: DOT_EMISSIVE, emissiveIntensity: DOT_EI,
@@ -292,31 +301,25 @@ window.Game3D = (() => {
     }
   }
 
-  // ── Explosion animation ────────────────────────────────────────────────────
+  // ── Animation helpers ──────────────────────────────────────────────────────
 
-  // Smooth scale-and-glow pulse using rAF; resolves when animation completes.
-  function flashExplode(meshes) {
+  // Smooth rAF animation shared by explode and receive pulses
+  function animatePulse(meshes, duration, maxScale, maxEI) {
     return new Promise(resolve => {
       const t0 = performance.now();
-      const dur = 380;
       function tick(now) {
-        const t = Math.min((now - t0) / dur, 1);
-        // sin wave: scale peaks at midpoint, glow follows
-        const s  = 1 + 0.5  * Math.sin(t * Math.PI);
-        const ei = 1.6 * Math.sin(t * Math.PI);
+        const t = Math.min((now - t0) / duration, 1);
+        const s  = 1 + maxScale * Math.sin(t * Math.PI);
+        const ei = maxEI     * Math.sin(t * Math.PI);
         for (const m of meshes) {
           if (!m?.material) continue;
           m.scale.setScalar(s);
-          m.material.emissiveIntensity = ei;
+          m.material.emissiveIntensity = Math.max(0, ei);
         }
         if (t < 1) {
           requestAnimationFrame(tick);
         } else {
-          for (const m of meshes) {
-            if (!m) continue;
-            m.scale.setScalar(1);
-            // emissive will be reset by next renderCell call
-          }
+          for (const m of meshes) { if (m) m.scale.setScalar(1); }
           resolve();
         }
       }
@@ -324,9 +327,14 @@ window.Game3D = (() => {
     });
   }
 
-  // ── Game logic ─────────────────────────────────────────────────────────────
+  // Big slow pulse for exploding cells
+  const flashExplode  = meshes => animatePulse(meshes, 600, 0.55, 1.8);
+  // Smaller quick pulse for cells that just received counters
+  const flashReceive  = meshes => animatePulse(meshes, 300, 0.18, 0.9);
 
   const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  // ── Game logic ─────────────────────────────────────────────────────────────
 
   async function doTurn(x, y, z) {
     G.busy = true;
@@ -374,21 +382,30 @@ window.Game3D = (() => {
     const N = G.N;
     let wave = dedup(initial);
 
-    while (wave.length) {
-      if (G.epoch !== epoch) return;
+    // Start revolving the cube so all sides become visible
+    autoRotTarget = AUTO_ROT_SPEED;
 
-      // Animate all exploding cells simultaneously
+    while (wave.length) {
+      if (G.epoch !== epoch) { autoRotTarget = 0; return; }
+
+      // 1 — animate exploding cells with a big slow pulse
       const waveMeshes = wave.map(([x,y,z]) => getMesh(x, y, z)).filter(Boolean);
       await flashExplode(waveMeshes);
+      if (G.epoch !== epoch) { autoRotTarget = 0; return; }
 
-      if (G.epoch !== epoch) return;
-
+      // 2 — collect neighbour cells before applying logic
+      const receiverKeys = new Set();
       const toExplode = wave.filter(([x,y,z]) => {
         const c = G.cells[key(x,y,z)];
         return c && c.n >= cap(x, y, z, N);
       });
       if (!toExplode.length) break;
 
+      for (const [x,y,z] of toExplode)
+        for (const [nx,ny,nz] of nbrs(x, y, z, N))
+          receiverKeys.add(key(nx, ny, nz));
+
+      // 3 — apply explosion logic
       for (const [x,y,z] of toExplode) {
         const cell = G.cells[key(x,y,z)];
         if (!cell || cell.n < cap(x,y,z,N)) continue;
@@ -404,13 +421,23 @@ window.Game3D = (() => {
 
       renderAll();
       updateHUD();
-      if (checkWin()) return;
+      if (checkWin()) { autoRotTarget = 0; return; }
+
+      // 4 — small pulse on cells that just received counters
+      const recvMeshes = [...receiverKeys]
+        .map(k => { const [x,y,z] = k.split(',').map(Number); return getMesh(x,y,z); })
+        .filter(Boolean);
+      await flashReceive(recvMeshes);
+      if (G.epoch !== epoch) { autoRotTarget = 0; return; }
 
       wave = [];
       for (const [x,y,z] of G.surface)
         if (G.cells[key(x,y,z)].n >= cap(x,y,z,N)) wave.push([x,y,z]);
       wave = dedup(wave);
     }
+
+    // Ease the rotation back to stopped
+    autoRotTarget = 0;
   }
 
   function dedup(cells) {
@@ -559,6 +586,8 @@ window.Game3D = (() => {
     G.surface = buildSurface(N);
     G.cells = {};
     for (const [x,y,z] of G.surface) G.cells[key(x,y,z)] = { p: null, n: 0 };
+    autoRotTarget = 0;
+    autoRotCur    = 0;
     $('red-ind').classList.remove('thinking');
     $('win-modal').classList.add('hidden');
   }
