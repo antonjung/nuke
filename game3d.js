@@ -1,7 +1,7 @@
 'use strict';
 
 // ── 3D chain-reaction game ───────────────────────────────────────────────────
-// Surface cells of an N×N×N cube. Adjacency = same face or across face edges.
+// Surface cells of an N×N×N cube. Adjacency = ±1 in any axis, filtered to surface.
 // Exposed as window.Game3D = { start, newRound, isReady }
 
 window.Game3D = (() => {
@@ -26,19 +26,33 @@ window.Game3D = (() => {
   let scene = null;
   let camera = null;
   let group = null;       // rotating cube group
-  let cellMeshes = [];    // one BoxMesh per surface cell
+  let cellMeshes = [];    // BoxMesh per surface cell
+  let edgeMeshes = [];    // LineSegments per surface cell (wireframe)
   let dotGroups = {};     // key → [SphereMesh, ...]
   let rafId = null;
   let ready = false;
 
-  const SPACING = 1.08;   // cell size + gap
-  const CSIZE   = 1.0;    // visual cell size (slightly < SPACING)
-  const DOT_PUSH = 0.52;  // distance from cell center to dot (just past face at 0.45)
+  const SPACING = 1.08;
+  const CSIZE   = 0.9;   // visual cell size
 
+  // Cell colours: transparent enough to see dots inside
   const COL = {
-    empty : { c: 0x1a1a40, e: 0x000000, ei: 0.0,  op: 0.28 },
-    blue  : { c: 0x4a9eff, e: 0x1a3a70, ei: 0.45, op: 0.92 },
-    red   : { c: 0xff4a6e, e: 0x701a30, ei: 0.45, op: 0.92 },
+    empty : { c: 0x1e2055, e: 0x000000, ei: 0.0,  op: 0.18 },
+    blue  : { c: 0x4a9eff, e: 0x1a3a70, ei: 0.25, op: 0.52 },
+    red   : { c: 0xff4a6e, e: 0x701a30, ei: 0.25, op: 0.52 },
+  };
+
+  // Dot colour — neutral grey, same for both players (cell colour carries ownership)
+  const DOT_COLOR    = 0x999999;
+  const DOT_EMISSIVE = 0x333333;
+  const DOT_EI       = 0.4;
+  const DOT_R        = CSIZE * 0.13;
+
+  // Die-face dot offsets in cell-local space (fraction of CSIZE)
+  const DOT_POS = {
+    1: [[0,    0,    0   ]],
+    2: [[-0.24, 0,   0   ], [0.24,  0,   0   ]],
+    3: [[-0.22, 0.2, 0   ], [0.22,  0.2, 0   ], [0,    -0.22, 0]],
   };
 
   const $ = id => document.getElementById(id);
@@ -73,30 +87,6 @@ window.Game3D = (() => {
 
   const cap = (x, y, z, N) => nbrs(x, y, z, N).length;
 
-  // Returns normalized outward-facing direction for a surface cell
-  function computeOutDir(x, y, z, N) {
-    let ox = 0, oy = 0, oz = 0;
-    if (x === 0)   ox -= 1;
-    if (x === N-1) ox += 1;
-    if (y === 0)   oy -= 1;
-    if (y === N-1) oy += 1;
-    if (z === 0)   oz -= 1;
-    if (z === N-1) oz += 1;
-    const len = Math.sqrt(ox*ox + oy*oy + oz*oz);
-    return [ox/len, oy/len, oz/len];
-  }
-
-  // Returns two perpendicular unit vectors to n (for face-plane dot layout)
-  function perpAxes(n) {
-    let u = Math.abs(n[1]) > 0.9 ? [1, 0, 0] : [0, 1, 0];
-    const d = u[0]*n[0] + u[1]*n[1] + u[2]*n[2];
-    u = [u[0] - d*n[0], u[1] - d*n[1], u[2] - d*n[2]];
-    const ul = Math.sqrt(u[0]**2 + u[1]**2 + u[2]**2);
-    u = u.map(v => v/ul);
-    const v = [n[1]*u[2] - n[2]*u[1], n[2]*u[0] - n[0]*u[2], n[0]*u[1] - n[1]*u[0]];
-    return [u, v];
-  }
-
   // ── Scene setup ────────────────────────────────────────────────────────────
 
   async function loadThree() {
@@ -125,11 +115,12 @@ window.Game3D = (() => {
     camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 200);
     repositionCamera();
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
-    const d1 = new THREE.DirectionalLight(0xffffff, 0.9);
+    // Strong ambient so colours are clear from all angles
+    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    const d1 = new THREE.DirectionalLight(0xffffff, 0.8);
     d1.position.set(6, 9, 6);
     scene.add(d1);
-    const d2 = new THREE.DirectionalLight(0x6080ff, 0.3);
+    const d2 = new THREE.DirectionalLight(0x6080ff, 0.25);
     d2.position.set(-5, -4, -5);
     scene.add(d2);
 
@@ -147,7 +138,7 @@ window.Game3D = (() => {
 
   function repositionCamera() {
     if (!camera || !G.N) return;
-    const dist = G.N * SPACING * 2.0 + 3;
+    const dist = G.N * SPACING * 1.85 + 3;
     camera.position.set(0, 0, dist);
     camera.lookAt(0, 0, 0);
     camera.updateProjectionMatrix();
@@ -218,29 +209,47 @@ window.Game3D = (() => {
   // ── Cell meshes ────────────────────────────────────────────────────────────
 
   function rebuildMeshes() {
+    // Remove old meshes
     cellMeshes.forEach(m => group.remove(m));
+    edgeMeshes.forEach(m => group.remove(m));
     Object.values(dotGroups).flat().forEach(m => group.remove(m));
     cellMeshes = [];
+    edgeMeshes = [];
     dotGroups = {};
 
     const N = G.N;
     const off = (N - 1) / 2 * SPACING;
-    const geo = new THREE.BoxGeometry(CSIZE * 0.9, CSIZE * 0.9, CSIZE * 0.9);
+    const boxGeo  = new THREE.BoxGeometry(CSIZE, CSIZE, CSIZE);
+    const edgeGeo = new THREE.EdgesGeometry(boxGeo);
+    const edgeMat = new THREE.LineBasicMaterial({ color: 0x4455cc, transparent: true, opacity: 0.45 });
 
     for (const [x, y, z] of G.surface) {
       const mat = new THREE.MeshStandardMaterial({
         color: COL.empty.c, emissive: COL.empty.e,
         emissiveIntensity: COL.empty.ei,
-        roughness: 0.4, metalness: 0.15,
+        roughness: 0.35, metalness: 0.1,
         transparent: true, opacity: COL.empty.op,
+        depthWrite: false,
       });
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(x * SPACING - off, y * SPACING - off, z * SPACING - off);
-      mesh.userData = { cx: x, cy: y, cz: z, outDir: computeOutDir(x, y, z, N) };
+      const mesh = new THREE.Mesh(boxGeo, mat);
+      const pos = [x * SPACING - off, y * SPACING - off, z * SPACING - off];
+      mesh.position.set(...pos);
+      mesh.userData = { cx: x, cy: y, cz: z };
       group.add(mesh);
       cellMeshes.push(mesh);
+
+      // Wireframe always drawn on top for cube grid visibility
+      const edges = new THREE.LineSegments(edgeGeo, edgeMat.clone());
+      edges.position.set(...pos);
+      group.add(edges);
+      edgeMeshes.push(edges);
+
       dotGroups[key(x, y, z)] = [];
     }
+  }
+
+  function getMesh(x, y, z) {
+    return cellMeshes.find(m => m.userData.cx === x && m.userData.cy === y && m.userData.cz === z);
   }
 
   function renderAll() { G.surface.forEach(([x,y,z]) => renderCell(x, y, z)); }
@@ -248,7 +257,7 @@ window.Game3D = (() => {
   function renderCell(x, y, z) {
     const k    = key(x, y, z);
     const cell = G.cells[k];
-    const mesh = cellMeshes.find(m => m.userData.cx === x && m.userData.cy === y && m.userData.cz === z);
+    const mesh = getMesh(x, y, z);
     if (!mesh) return;
 
     const col = cell.p ? COL[cell.p] : COL.empty;
@@ -257,39 +266,62 @@ window.Game3D = (() => {
     mesh.material.emissiveIntensity = col.ei;
     mesh.material.opacity = col.op;
 
-    // Dots — placed on the outward face of the cell, never inside it
+    // Remove old dots
     dotGroups[k].forEach(d => group.remove(d));
     dotGroups[k] = [];
     if (!cell.p || cell.n <= 0) return;
 
-    // 2-D layout on face plane: [along-u, along-v] offsets
-    const DOT_POS = {
-      1: [[0, 0]],
-      2: [[-0.26, 0], [0.26, 0]],
-      3: [[-0.23, 0.2], [0.23, 0.2], [0, -0.22]],
-    };
-    const facePos = DOT_POS[Math.min(cell.n, 3)];
-    if (!facePos) return;
+    const positions = DOT_POS[Math.min(cell.n, 3)];
+    if (!positions) return;
 
-    const fill     = cell.p === 'blue' ? 0x4a9eff : 0xff4a6e;
-    const emissive = cell.p === 'blue' ? 0x2255bb : 0xbb2244;
-    const dotGeo   = new THREE.SphereGeometry(CSIZE * 0.14, 10, 10);
-    const outDir   = mesh.userData.outDir || [0, 0, 1];
-    const [ua, va] = perpAxes(outDir);
+    const dotGeo = new THREE.SphereGeometry(DOT_R, 10, 10);
 
-    for (const [du, dv] of facePos) {
+    for (const [dx, dy, dz] of positions) {
       const dotMat = new THREE.MeshStandardMaterial({
-        color: fill, emissive, emissiveIntensity: 0.7, roughness: 0.2,
+        color: DOT_COLOR, emissive: DOT_EMISSIVE, emissiveIntensity: DOT_EI,
+        roughness: 0.3, metalness: 0.1,
       });
       const dot = new THREE.Mesh(dotGeo, dotMat);
       dot.position.set(
-        mesh.position.x + outDir[0]*DOT_PUSH + ua[0]*du*CSIZE + va[0]*dv*CSIZE,
-        mesh.position.y + outDir[1]*DOT_PUSH + ua[1]*du*CSIZE + va[1]*dv*CSIZE,
-        mesh.position.z + outDir[2]*DOT_PUSH + ua[2]*du*CSIZE + va[2]*dv*CSIZE,
+        mesh.position.x + dx * CSIZE,
+        mesh.position.y + dy * CSIZE,
+        mesh.position.z + dz * CSIZE,
       );
       group.add(dot);
       dotGroups[k].push(dot);
     }
+  }
+
+  // ── Explosion animation ────────────────────────────────────────────────────
+
+  // Smooth scale-and-glow pulse using rAF; resolves when animation completes.
+  function flashExplode(meshes) {
+    return new Promise(resolve => {
+      const t0 = performance.now();
+      const dur = 380;
+      function tick(now) {
+        const t = Math.min((now - t0) / dur, 1);
+        // sin wave: scale peaks at midpoint, glow follows
+        const s  = 1 + 0.5  * Math.sin(t * Math.PI);
+        const ei = 1.6 * Math.sin(t * Math.PI);
+        for (const m of meshes) {
+          if (!m?.material) continue;
+          m.scale.setScalar(s);
+          m.material.emissiveIntensity = ei;
+        }
+        if (t < 1) {
+          requestAnimationFrame(tick);
+        } else {
+          for (const m of meshes) {
+            if (!m) continue;
+            m.scale.setScalar(1);
+            // emissive will be reset by next renderCell call
+          }
+          resolve();
+        }
+      }
+      requestAnimationFrame(tick);
+    });
   }
 
   // ── Game logic ─────────────────────────────────────────────────────────────
@@ -345,15 +377,9 @@ window.Game3D = (() => {
     while (wave.length) {
       if (G.epoch !== epoch) return;
 
-      // Flash exploding cells
-      const bright = wave.map(([x,y,z]) => {
-        const m = cellMeshes.find(m => m.userData.cx===x && m.userData.cy===y && m.userData.cz===z);
-        if (m) { const prev = m.material.emissiveIntensity; m.material.emissiveIntensity = 1.2; return [m, prev]; }
-        return null;
-      }).filter(Boolean);
-
-      await sleep(320);
-      bright.forEach(([m, prev]) => { if (m.material) m.material.emissiveIntensity = prev; });
+      // Animate all exploding cells simultaneously
+      const waveMeshes = wave.map(([x,y,z]) => getMesh(x, y, z)).filter(Boolean);
+      await flashExplode(waveMeshes);
 
       if (G.epoch !== epoch) return;
 
@@ -560,9 +586,10 @@ window.Game3D = (() => {
   function newRound(opts) {
     if (!ready) return;
     const { N, aiMode, aiDifficulty, turn } = opts;
+    const sizeChanged = G.N !== N;
     resetState(N, aiMode, aiDifficulty, turn);
-    if (G.N !== N) { repositionCamera(); rebuildMeshes(); }
-    else            { rebuildMeshes(); }
+    rebuildMeshes();
+    if (sizeChanged) repositionCamera();
     renderAll();
     updateHUD();
     if (turn === 'red' && aiMode) aiOpeningMove(G.epoch);
