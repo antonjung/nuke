@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = '2.3.2';
+const VERSION = '2.3.3';
 
 // ── Dot layout (viewBox 0-100) ──────────────────────────────────────────────
 const DOT_POSITIONS = {
@@ -572,7 +572,8 @@ function applyAnimScale(s) {
   root.setProperty('--anim-capture', `${Math.round(420 * s)}ms`);
 }
 
-window.ANIM_SCALE = 1;
+window.ANIM_SCALE = 1.7;
+applyAnimScale(1.7);
 $('anim-speed').addEventListener('change', () => {
   window.ANIM_SCALE = parseFloat($('anim-speed').value);
   applyAnimScale(window.ANIM_SCALE);

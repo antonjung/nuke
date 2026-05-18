@@ -492,43 +492,6 @@ window.Game3D = (() => {
     });
   }
 
-  // Wobble the dot spheres in exploding cells just before they fly off
-  function wobbleDots(cells) {
-    return new Promise(resolve => {
-      const t0  = performance.now();
-      const dur = T(450);
-      const amp = CSIZE * 0.11;
-      const entries = [];
-      for (const [x, y, z] of cells) {
-        for (const dot of (dotGroups[key(x, y, z)] || [])) {
-          entries.push({
-            dot,
-            base: dot.position.clone(),
-            axis: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize(),
-            phase: Math.random() * Math.PI * 2,
-          });
-        }
-      }
-      if (!entries.length) { resolve(); return; }
-
-      function tick(now) {
-        const el  = now - t0;
-        const t   = Math.min(el / dur, 1);
-        const env = Math.sin(t * Math.PI); // ramps up then back down
-        for (const { dot, base, axis, phase } of entries) {
-          const s = Math.sin(el * 0.001 * 22 * Math.PI * 2 + phase) * amp * env;
-          dot.position.set(base.x + axis.x * s, base.y + axis.y * s, base.z + axis.z * s);
-        }
-        if (t < 1) {
-          requestAnimationFrame(tick);
-        } else {
-          for (const { dot, base } of entries) dot.position.copy(base);
-          resolve();
-        }
-      }
-      requestAnimationFrame(tick);
-    });
-  }
 
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -612,11 +575,8 @@ window.Game3D = (() => {
         for (const [nx,ny,nz] of nbrs(x, y, z, N))
           receiverKeys.add(key(nx, ny, nz));
 
-      // Wobble dots then launch explosion — don't await flight yet so logic
-      // can run mid-flight and colour transitions overlap with electron travel
-      await wobbleDots(toExplode);
-      if (G.epoch !== epoch) { targeting = false; return; }
-
+      // Launch explosion without awaiting — logic runs mid-flight so colour
+      // transitions overlap with electron travel
       const electronFlight = Promise.all([
         flashExplode(waveMeshes),
         sleep(T(120)).then(() => animateElectrons(toExplode, N)),
