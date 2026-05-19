@@ -12,11 +12,17 @@ A PWA chain-reaction strategy game playable on a single device. Built with vanil
 - Chain reactions continue until the board is stable
 - Win by being the only player with counters remaining
 
-Cell capacity by position:
+Cell capacity by position (2D):
 - Corner cells: 2 neighbours
 - Edge cells: 3 neighbours
 - Inner cells: 4 neighbours
-- 3D surface cells: varies (2–5 neighbours on cube surface)
+
+Cell capacity by position (3D):
+- Surface corner cells: 3 neighbours
+- Surface edge cells: 4 neighbours
+- Surface face cells: 5 neighbours (4 surface + 1 inner)
+- Inner cells: 6 neighbours (all bounded directions)
+- Players place on surface cells only; inner cells fill via explosions only
 
 ## files
 
@@ -47,8 +53,10 @@ Cell capacity by position:
 - Captured cells flash white → player colour via `.capturing` class
 
 ### 3D (Three.js)
-- Cells are `BoxGeometry` + `EdgesGeometry` LineSegments on the surface of an N×N×N cube
-- Counters are grey `SphereGeometry` dots offset inside each cell
+- Surface cells: `BoxGeometry` + `EdgesGeometry` LineSegments; clickable via raycaster
+- Inner cells: invisible ghost mesh (position reference only); not in `cellMeshes`, not clickable
+- Counter dots (`SphereGeometry`) are visible for both surface and inner cells; inner dots float visibly through the semi-transparent walls
+- `G.surface` = placeable surface cells; `G.allCells` = all N³ cells (used for explosion loops, rendering, AI evaluation)
 - Render loop drives: targeted rotation (lerp toward explosion/AI move), critical cell edge pulse, `matAnims` colour lerp
 - `matAnims` Map: smooth per-cell colour/opacity transitions triggered by `renderAll()`
 - `animateElectrons()`: quadratic bezier sphere arcs fly from exploding cells to neighbours
@@ -73,4 +81,4 @@ Cell capacity by position:
 
 ## service worker / versioning
 - Bump `VERSION` in `app.js` and `CACHE` in `sw.js` together on every release
-- Current version: 2.3.6
+- Current version: 2.3.7

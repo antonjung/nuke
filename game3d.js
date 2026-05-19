@@ -1,7 +1,8 @@
 'use strict';
 
 // ── 3D chain-reaction game ───────────────────────────────────────────────────
-// Surface cells of an N×N×N cube. Adjacency = ±1 in any axis, filtered to surface.
+// All N×N×N cells exist. Surface cells are placeable; inner cells receive only.
+// Adjacency = ±1 in any axis bounded by the grid (no surface filter).
 // Exposed as window.Game3D = { start, newRound, isReady }
 
 window.Game3D = (() => {
@@ -10,7 +11,8 @@ window.Game3D = (() => {
   const G = {
     N: 3,
     cells: {},
-    surface: [],
+    surface: [],   // placeable surface cells only
+    allCells: [],  // every cell including inner
     turn: 'blue',
     over: false,
     busy: false,
@@ -28,6 +30,7 @@ window.Game3D = (() => {
   let group = null;
   let cellMeshes = [];
   let edgeMeshes = [];
+  let innerMeshes = [];  // invisible ghost meshes for inner cells
   let dotGroups = {};
   let meshByKey = new Map();   // key → mesh (O(1) lookup)
   let rafId = null;
@@ -86,14 +89,23 @@ window.Game3D = (() => {
     return a;
   }
 
+  function buildAllCells(N) {
+    const a = [];
+    for (let x = 0; x < N; x++)
+      for (let y = 0; y < N; y++)
+        for (let z = 0; z < N; z++)
+          a.push([x, y, z]);
+    return a;
+  }
+
   const DIRS = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
 
+  // Neighbours = all in-bounds cells, including inner (no surface filter)
   function nbrs(x, y, z, N) {
     return DIRS
       .map(([dx,dy,dz]) => [x+dx, y+dy, z+dz])
       .filter(([nx,ny,nz]) =>
-        nx >= 0 && nx < N && ny >= 0 && ny < N && nz >= 0 && nz < N &&
-        isSurf(nx, ny, nz, N)
+        nx >= 0 && nx < N && ny >= 0 && ny < N && nz >= 0 && nz < N
       );
   }
 
@@ -264,9 +276,11 @@ window.Game3D = (() => {
   function rebuildMeshes() {
     cellMeshes.forEach(m => group.remove(m));
     edgeMeshes.forEach(m => group.remove(m));
+    innerMeshes.forEach(m => group.remove(m));
     Object.values(dotGroups).flat().forEach(m => group.remove(m));
     cellMeshes = [];
     edgeMeshes = [];
+    innerMeshes = [];
     dotGroups  = {};
     meshByKey.clear();
     criticalSet.clear();
@@ -274,36 +288,49 @@ window.Game3D = (() => {
 
     const N   = G.N;
     const off = (N - 1) / 2 * SPACING;
-    const boxGeo  = new THREE.BoxGeometry(CSIZE, CSIZE, CSIZE);
-    const edgeGeo = new THREE.EdgesGeometry(boxGeo);
-    const edgeMat = new THREE.LineBasicMaterial({ color: 0x4455cc, transparent: true, opacity: 0.45 });
+    const boxGeo   = new THREE.BoxGeometry(CSIZE, CSIZE, CSIZE);
+    const edgeGeo  = new THREE.EdgesGeometry(boxGeo);
+    const edgeMat  = new THREE.LineBasicMaterial({ color: 0x4455cc, transparent: true, opacity: 0.45 });
+    const ghostGeo = new THREE.BoxGeometry(0.001, 0.001, 0.001);
+    const ghostMat = new THREE.MeshStandardMaterial({ visible: false });
 
-    for (const [x, y, z] of G.surface) {
-      const mat = new THREE.MeshStandardMaterial({
-        color: COL.empty.c, emissive: COL.empty.e, emissiveIntensity: COL.empty.ei,
-        roughness: 0.35, metalness: 0.1,
-        transparent: true, opacity: COL.empty.op, depthWrite: false,
-      });
-      const mesh = new THREE.Mesh(boxGeo, mat);
-      const pos  = [x * SPACING - off, y * SPACING - off, z * SPACING - off];
-      mesh.position.set(...pos);
-
-      const edges = new THREE.LineSegments(edgeGeo, edgeMat.clone());
-      edges.position.set(...pos);
-      group.add(edges);
-      edgeMeshes.push(edges);
-
-      mesh.userData = { cx: x, cy: y, cz: z, edges };
-      group.add(mesh);
-      cellMeshes.push(mesh);
-      meshByKey.set(key(x, y, z), mesh);
+    for (const [x, y, z] of G.allCells) {
+      const pos = [x * SPACING - off, y * SPACING - off, z * SPACING - off];
       dotGroups[key(x, y, z)] = [];
+
+      if (isSurf(x, y, z, N)) {
+        const mat = new THREE.MeshStandardMaterial({
+          color: COL.empty.c, emissive: COL.empty.e, emissiveIntensity: COL.empty.ei,
+          roughness: 0.35, metalness: 0.1,
+          transparent: true, opacity: COL.empty.op, depthWrite: false,
+        });
+        const mesh = new THREE.Mesh(boxGeo, mat);
+        mesh.position.set(...pos);
+
+        const edges = new THREE.LineSegments(edgeGeo, edgeMat.clone());
+        edges.position.set(...pos);
+        group.add(edges);
+        edgeMeshes.push(edges);
+
+        mesh.userData = { cx: x, cy: y, cz: z, edges };
+        group.add(mesh);
+        cellMeshes.push(mesh);
+        meshByKey.set(key(x, y, z), mesh);
+      } else {
+        // Inner cell: invisible ghost mesh for position reference during electron animation
+        const mesh = new THREE.Mesh(ghostGeo, ghostMat);
+        mesh.position.set(...pos);
+        mesh.userData = { cx: x, cy: y, cz: z, edges: null, inner: true };
+        group.add(mesh);
+        innerMeshes.push(mesh);
+        meshByKey.set(key(x, y, z), mesh);
+      }
     }
   }
 
   const getMesh = (x, y, z) => meshByKey.get(key(x, y, z));
 
-  function renderAll() { G.surface.forEach(([x,y,z]) => renderCell(x, y, z)); }
+  function renderAll() { G.allCells.forEach(([x,y,z]) => renderCell(x, y, z)); }
 
   // Start (or restart) a smooth colour + opacity transition for a cell
   function animateMat(k, mesh, col, dur = 320) {
@@ -329,28 +356,28 @@ window.Game3D = (() => {
     const mesh = getMesh(x, y, z);
     if (!mesh) return;
 
-    const col    = cell.p ? COL[cell.p] : COL.empty;
-    const edges  = mesh.userData.edges;
-    const isCrit = cell.p && cell.n > 0 && cell.n === cap(x, y, z, G.N) - 1;
+    // Inner cells have no visible box — skip material animation, just update dots
+    if (!mesh.userData.inner) {
+      const col    = cell.p ? COL[cell.p] : COL.empty;
+      const edges  = mesh.userData.edges;
+      const isCrit = cell.p && cell.n > 0 && cell.n === cap(x, y, z, G.N) - 1;
 
-    // Animate colour / opacity change
-    animateMat(k, mesh, col);
+      animateMat(k, mesh, col);
 
-    // Emissive + critical set
-    if (isCrit) {
-      if (!criticalSet.has(k)) {
-        criticalSet.set(k, { mesh, edges, baseEI: col.ei });
-        if (edges?.material) edges.material.color.setHex(0xff8800);
+      if (isCrit) {
+        if (!criticalSet.has(k)) {
+          criticalSet.set(k, { mesh, edges, baseEI: col.ei });
+          if (edges?.material) edges.material.color.setHex(0xff8800);
+        }
+      } else {
+        if (criticalSet.has(k)) {
+          criticalSet.delete(k);
+          if (edges?.material) { edges.material.color.setHex(0x4455cc); edges.material.opacity = 0.45; }
+        }
+        mesh.material.emissiveIntensity = col.ei;
       }
-    } else {
-      if (criticalSet.has(k)) {
-        criticalSet.delete(k);
-        if (edges?.material) { edges.material.color.setHex(0x4455cc); edges.material.opacity = 0.45; }
-      }
-      mesh.material.emissiveIntensity = col.ei;
+      mesh.material.emissive.setHex(col.e);
     }
-    // Set emissive target (not animated — instant is fine)
-    mesh.material.emissive.setHex(col.e);
 
     if (skipDots) return;
 
@@ -571,7 +598,7 @@ window.Game3D = (() => {
 
       // Snapshot owners + collect receiver keys before logic runs
       const prevOwner = {};
-      for (const [x,y,z] of G.surface) prevOwner[key(x,y,z)] = G.cells[key(x,y,z)].p;
+      for (const [x,y,z] of G.allCells) prevOwner[key(x,y,z)] = G.cells[key(x,y,z)].p;
       const receiverKeys = new Set();
       for (const [x,y,z] of toExplode)
         for (const [nx,ny,nz] of nbrs(x, y, z, N))
@@ -610,14 +637,15 @@ window.Game3D = (() => {
       }
 
       // Update cell colours only — dots stay hidden until electrons land
-      G.surface.forEach(([x,y,z]) => renderCell(x, y, z, true));
+      G.allCells.forEach(([x,y,z]) => renderCell(x, y, z, true));
       updateHUD();
       if (checkWin()) { targeting = false; return; }
 
-      // Identify captured vs plain-received (must be after logic)
+      // Identify captured vs plain-received on surface cells only (inner cells have no visible flash)
       const capturedMeshes = [], recvOnlyMeshes = [];
       for (const k of receiverKeys) {
         const [x,y,z] = k.split(',').map(Number);
+        if (!isSurf(x, y, z, G.N)) continue;
         const m = getMesh(x, y, z);
         if (!m) continue;
         (G.cells[k].p && G.cells[k].p !== prevOwner[k] ? capturedMeshes : recvOnlyMeshes).push(m);
@@ -631,7 +659,7 @@ window.Game3D = (() => {
       renderAll();
 
       wave = [];
-      for (const [x,y,z] of G.surface)
+      for (const [x,y,z] of G.allCells)
         if (G.cells[key(x,y,z)].n >= cap(x,y,z,N)) wave.push([x,y,z]);
       wave = dedup(wave);
     }
@@ -706,14 +734,14 @@ window.Game3D = (() => {
       }
       const live = Object.values(g).filter(c => c.n > 0);
       if (new Set(live.map(c => c.p)).size === 1) break;
-      wave = G.surface.filter(([cx,cy,cz]) => g[key(cx,cy,cz)].n >= cap(cx,cy,cz,N));
+      wave = G.allCells.filter(([cx,cy,cz]) => g[key(cx,cy,cz)]?.n >= cap(cx,cy,cz,N));
     }
     return g;
   }
 
   function evaluate(cells, N, player) {
     let myC = 0, opC = 0, myF = 0, opF = 0, myCells = 0, opCells = 0;
-    for (const [x,y,z] of G.surface) {
+    for (const [x,y,z] of G.allCells) {
       const c = cells[key(x,y,z)];
       if (!c.p || !c.n) continue;
       const cc = cap(x,y,z,N);
@@ -788,9 +816,10 @@ window.Game3D = (() => {
     G.turn = turn;
     G.aiMode = aiMode;
     G.aiDifficulty = aiDifficulty;
-    G.surface = buildSurface(N);
+    G.surface  = buildSurface(N);
+    G.allCells = buildAllCells(N);
     G.cells = {};
-    for (const [x,y,z] of G.surface) G.cells[key(x,y,z)] = { p: null, n: 0 };
+    for (const [x,y,z] of G.allCells) G.cells[key(x,y,z)] = { p: null, n: 0 };
     targeting = false;
     criticalSet.clear();
     matAnims.clear();
