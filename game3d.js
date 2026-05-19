@@ -19,6 +19,7 @@ window.Game3D = (() => {
     played: { blue: false, red: false },
     epoch: 0,
     aiMode: false,
+    aiVsAi: false,
     aiDifficulty: 'medium',
   };
 
@@ -252,6 +253,7 @@ window.Game3D = (() => {
 
   function onCellTap(e) {
     if (G.over || G.busy) return;
+    if (G.aiVsAi) return;
     if (G.aiMode && G.turn !== 'blue') return;
 
     const rect = renderer.domElement.getBoundingClientRect();
@@ -573,6 +575,13 @@ window.Game3D = (() => {
 
     G.turn = G.turn === 'blue' ? 'red' : 'blue';
     updateHUD();
+
+    // Stalemate: next player has inner-cell counters but no valid surface moves
+    if (validMoves(G.cells, G.turn).length === 0) {
+      const stuck = Object.values(G.cells).some(c => c.p === G.turn && c.n > 0);
+      if (stuck) { G.over = true; showStalemate(G.turn); return false; }
+    }
+
     return true;
   }
 
@@ -690,7 +699,8 @@ window.Game3D = (() => {
     $('red-count').textContent  = counts.red;
     $('blue-ind').classList.toggle('active', G.turn === 'blue');
     $('red-ind').classList.toggle('active',  G.turn === 'red');
-    document.querySelector('#red-ind .p-name').textContent = G.aiMode ? 'CPU' : 'Red';
+    document.querySelector('#blue-ind .p-name').textContent = G.aiVsAi ? 'CPU' : 'Blue';
+    document.querySelector('#red-ind .p-name').textContent  = (G.aiMode || G.aiVsAi) ? 'CPU' : 'Red';
     $('hud').classList.toggle('red-turn', G.turn === 'red');
   }
 
@@ -701,9 +711,21 @@ window.Game3D = (() => {
     arrow.style.color = `var(--${player})`;
     const bar = $('result-bar');
     bar.className = player;
-    bar.textContent = G.aiMode
-      ? (player === 'blue' ? 'You Win!' : 'CPU Wins!')
-      : (player === 'blue' ? 'Blue Wins!' : 'Red Wins!');
+    bar.textContent = G.aiVsAi
+      ? (player === 'blue' ? 'Blue Wins!' : 'Red Wins!')
+      : G.aiMode
+        ? (player === 'blue' ? 'You Win!' : 'CPU Wins!')
+        : (player === 'blue' ? 'Blue Wins!' : 'Red Wins!');
+  }
+
+  function showStalemate(player) {
+    const bar = $('result-bar');
+    bar.className = 'stalemate';
+    const name = G.aiVsAi                       ? (player === 'blue' ? 'Blue' : 'Red')
+               : (G.aiMode && player === 'red')  ? 'CPU'
+               : (G.aiMode && player === 'blue') ? 'You'
+               : (player === 'blue' ? 'Blue' : 'Red');
+    bar.textContent = name === 'You' ? "You're Trapped!" : `${name} Trapped!`;
   }
 
   // ── AI ─────────────────────────────────────────────────────────────────────
@@ -757,8 +779,8 @@ window.Game3D = (() => {
     return G.surface.filter(([x,y,z]) => { const c = cells[key(x,y,z)]; return !c.p || c.p === player; });
   }
 
-  function aiPick() {
-    const player = 'red', opp = 'blue', N = G.N;
+  function aiPick(player = 'red') {
+    const opp = player === 'red' ? 'blue' : 'red', N = G.N;
     const moves = validMoves(G.cells, player);
     if (!moves.length) return null;
 
@@ -796,7 +818,7 @@ window.Game3D = (() => {
     await sleep(700 + Math.random() * 700);
     $('red-ind').classList.remove('thinking');
     if (G.epoch !== epoch || G.over) { G.busy = false; return; }
-    const move = aiPick();
+    const move = aiPick('red');
     if (move) {
       aimAt([move], G.N);
       await sleep(400);
@@ -805,9 +827,29 @@ window.Game3D = (() => {
     if (G.epoch === epoch) G.busy = false;
   }
 
+  async function demoStep(epoch) {
+    if (G.epoch !== epoch || G.over || !G.aiVsAi) return;
+    G.busy = true;
+    const player = G.turn;
+    $(`${player}-ind`).classList.add('thinking');
+    await sleep(900 + Math.random() * 800);
+    $(`${player}-ind`).classList.remove('thinking');
+    if (G.epoch !== epoch || G.over) { G.busy = false; return; }
+    const move = aiPick(player);
+    if (!move) { G.busy = false; return; }
+    aimAt([move], G.N);
+    await sleep(500);
+    if (G.epoch !== epoch || G.over) { G.busy = false; return; }
+    const ok = await executeTurn(...move);
+    if (G.epoch === epoch) {
+      G.busy = false;
+      if (ok) demoStep(epoch);
+    }
+  }
+
   // ── Init helpers ───────────────────────────────────────────────────────────
 
-  function resetState(N, aiMode, aiDifficulty, turn) {
+  function resetState(N, aiMode, aiDifficulty, turn, aiVsAi = false) {
     G.epoch++;
     G.N    = N;
     G.over = false;
@@ -815,6 +857,7 @@ window.Game3D = (() => {
     G.played = { blue: false, red: false };
     G.turn = turn;
     G.aiMode = aiMode;
+    G.aiVsAi = aiVsAi;
     G.aiDifficulty = aiDifficulty;
     G.surface  = buildSurface(N);
     G.allCells = buildAllCells(N);
@@ -841,27 +884,29 @@ window.Game3D = (() => {
     if (!renderer) setupScene(container);
     ready = true;
 
-    const { N, aiMode, aiDifficulty, turn } = opts;
-    resetState(N, aiMode, aiDifficulty, turn);
+    const { N, aiMode, aiDifficulty, turn, aiVsAi = false } = opts;
+    resetState(N, aiMode, aiDifficulty, turn, aiVsAi);
     repositionCamera();
     rebuildMeshes();
     renderAll();
     updateHUD();
 
-    if (turn === 'red' && aiMode) aiOpeningMove(G.epoch);
+    if (aiVsAi) demoStep(G.epoch);
+    else if (turn === 'red' && aiMode) aiOpeningMove(G.epoch);
     return true;
   }
 
   function newRound(opts) {
     if (!ready) return;
-    const { N, aiMode, aiDifficulty, turn } = opts;
+    const { N, aiMode, aiDifficulty, turn, aiVsAi = false } = opts;
     const sizeChanged = G.N !== N;
-    resetState(N, aiMode, aiDifficulty, turn);
+    resetState(N, aiMode, aiDifficulty, turn, aiVsAi);
     rebuildMeshes();
     if (sizeChanged) repositionCamera();
     renderAll();
     updateHUD();
-    if (turn === 'red' && aiMode) aiOpeningMove(G.epoch);
+    if (aiVsAi) demoStep(G.epoch);
+    else if (turn === 'red' && aiMode) aiOpeningMove(G.epoch);
   }
 
   function isReady() { return ready; }

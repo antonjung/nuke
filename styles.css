@@ -499,6 +499,13 @@ button:active { transform: scale(0.96); }
   border-bottom: 1px solid rgba(255,74,110,0.5);
   text-shadow: 0 0 18px var(--red);
 }
+#result-bar.stalemate {
+  color: #f0c040;
+  background: linear-gradient(90deg, transparent 0%, rgba(240,192,64,0.18) 40%, rgba(240,192,64,0.18) 60%, transparent 100%);
+  border-top: 1px solid rgba(240,192,64,0.5);
+  border-bottom: 1px solid rgba(240,192,64,0.5);
+  text-shadow: 0 0 18px #f0c040;
+}
 @keyframes result-flash {
   0%, 100% { opacity: 0.75; }
   50%       { opacity: 1;    text-shadow: 0 0 36px currentColor, 0 0 60px currentColor; }

@@ -51,6 +51,7 @@
         <option value="easy">AI (Easy)</option>
         <option value="medium" selected>AI (Medium)</option>
         <option value="hard">AI (Hard)</option>
+        <option value="demo">Demo</option>
       </select>
       <select id="first-move" aria-label="Who goes first">
         <option value="blue" selected>Blue first</option>
@@ -108,7 +109,7 @@
         <li>Captured neighbours change to your colour. Chain reactions keep going until everything is stable.</li>
         <li>You win by being the only player left with counters on the board.</li>
       </ol>
-      <p class="help-tip">Corner squares need only 2 counters to explode. Edge squares need 3. Inner squares need 4. In 3D mode the game is played on the surface of the cube — drag to rotate and see all faces, then tap a cell to place your counter.</p>
+      <p class="help-tip">Corner squares need only 2 counters to explode. Edge squares need 3. Inner squares need 4. In 3D mode, tap a surface cell to place — drag to rotate. Interior cells fill via chain reactions only and need more counters to explode. Demo mode lets the AI play both sides.</p>
       <button id="help-close">Got it</button>
     </div>
   </div>

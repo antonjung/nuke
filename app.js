@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = '2.3.7';
+const VERSION = '2.3.8';
 
 // ── Dot layout (viewBox 0-100) ──────────────────────────────────────────────
 const DOT_POSITIONS = {
@@ -19,6 +19,7 @@ let G = {
   played: { blue: false, red: false },
   epoch: 0,        // incremented on newGame to cancel stale coroutines
   aiMode: true,
+  aiVsAi: false,
   aiDifficulty: 'medium',
 };
 
@@ -150,7 +151,8 @@ function updateHUD() {
   $('blue-ind').classList.toggle('active', G.turn === 'blue');
   $('red-ind').classList.toggle('active',  G.turn === 'red');
 
-  document.querySelector('#red-ind .p-name').textContent = G.aiMode ? 'CPU' : 'Red';
+  document.querySelector('#blue-ind .p-name').textContent = G.aiVsAi ? 'CPU' : 'Blue';
+  document.querySelector('#red-ind .p-name').textContent  = (G.aiMode || G.aiVsAi) ? 'CPU' : 'Red';
 
   const hud = $('hud');
   hud.classList.toggle('red-turn', G.turn === 'red');
@@ -361,10 +363,9 @@ function getValidMoves(grid, size, player) {
   return moves;
 }
 
-function aiPickMove() {
-  const player  = 'red';
-  const opp     = 'blue';
-  const moves   = getValidMoves(G.grid, G.size, player);
+function aiPickMove(player = 'red') {
+  const opp   = player === 'red' ? 'blue' : 'red';
+  const moves = getValidMoves(G.grid, G.size, player);
   if (!moves.length) return null;
 
   if (G.aiDifficulty === 'easy') {
@@ -435,6 +436,7 @@ async function executeTurn(r, c) {
 
 async function onCellClick(e) {
   if (G.over || G.busy) return;
+  if (G.aiVsAi) return;
   if (G.aiMode && G.turn !== 'blue') return;
 
   const r    = +e.currentTarget.dataset.r;
@@ -471,18 +473,32 @@ function showWin(player) {
   arrow.style.color = `var(--${player})`;
   const bar = $('result-bar');
   bar.className = player;
-  bar.textContent = G.aiMode
-    ? (player === 'blue' ? 'You Win!' : 'CPU Wins!')
-    : (player === 'blue' ? 'Blue Wins!' : 'Red Wins!');
+  bar.textContent = G.aiVsAi
+    ? (player === 'blue' ? 'Blue Wins!' : 'Red Wins!')
+    : G.aiMode
+      ? (player === 'blue' ? 'You Win!' : 'CPU Wins!')
+      : (player === 'blue' ? 'Blue Wins!' : 'Red Wins!');
+}
+
+function showStalemate(player) {
+  const bar = $('result-bar');
+  bar.className = 'stalemate';
+  const name = G.aiVsAi                        ? (player === 'blue' ? 'Blue' : 'Red')
+             : (G.aiMode && player === 'red')   ? 'CPU'
+             : (G.aiMode && player === 'blue')  ? 'You'
+             : (player === 'blue' ? 'Blue' : 'Red');
+  bar.textContent = name === 'You' ? "You're Trapped!" : `${name} Trapped!`;
 }
 
 // ── New game ──────────────────────────────────────────────────────────────────
 
 function aiOpts() {
-  const mode = $('mode').value;
-  const aiMode = mode !== '2p';
-  const turn = (aiMode && $('first-move').value === 'red') ? 'red' : 'blue';
-  return { mode, aiMode, aiDifficulty: mode, turn };
+  const mode    = $('mode').value;
+  const aiVsAi  = mode === 'demo';
+  const aiMode  = !aiVsAi && mode !== '2p';
+  const aiDifficulty = aiVsAi ? 'medium' : mode;
+  const turn    = (mode !== '2p' && $('first-move').value === 'red') ? 'red' : 'blue';
+  return { mode, aiMode, aiVsAi, aiDifficulty, turn };
 }
 
 function newGame() {
@@ -496,16 +512,17 @@ function newGame() {
 
   if ($('board').value === '3d') {
     if (window.Game3D && Game3D.isReady()) {
-      const { aiMode, aiDifficulty, turn } = aiOpts();
-      Game3D.newRound({ N: +$('cube-size').value, aiMode, aiDifficulty, turn });
+      const { aiMode, aiVsAi, aiDifficulty, turn } = aiOpts();
+      Game3D.newRound({ N: +$('cube-size').value, aiMode, aiVsAi, aiDifficulty, turn });
     }
     return;
   }
 
-  const { aiMode, aiDifficulty, turn } = aiOpts();
+  const { aiMode, aiVsAi, aiDifficulty, turn } = aiOpts();
   G.epoch++;
   G.size          = +$('grid-size').value;
   G.aiMode        = aiMode;
+  G.aiVsAi        = aiVsAi;
   G.aiDifficulty  = aiDifficulty;
   G.turn          = turn;
   G.grid          = mkGrid(G.size);
@@ -514,11 +531,13 @@ function newGame() {
   G.played        = { blue: false, red: false };
 
   $('red-ind').classList.remove('thinking');
+  $('blue-ind').classList.remove('thinking');
   buildGrid();
   renderAll();
   updateHUD();
 
-  if (turn === 'red') aiOpeningMove(G.epoch);
+  if (G.aiVsAi) demoLoop(G.epoch);
+  else if (turn === 'red') aiOpeningMove(G.epoch);
 }
 
 async function aiOpeningMove(epoch) {
@@ -527,9 +546,26 @@ async function aiOpeningMove(epoch) {
   await sleep(700 + Math.random() * 700);
   $('red-ind').classList.remove('thinking');
   if (G.epoch !== epoch || G.over) { G.busy = false; return; }
-  const move = aiPickMove();
+  const move = aiPickMove('red');
   if (move) await executeTurn(move[0], move[1]);
   if (G.epoch === epoch) G.busy = false;
+}
+
+async function demoLoop(epoch) {
+  if (G.epoch !== epoch || G.over || !G.aiVsAi) return;
+  G.busy = true;
+  const player = G.turn;
+  $(`${player}-ind`).classList.add('thinking');
+  await sleep(900 + Math.random() * 800);
+  $(`${player}-ind`).classList.remove('thinking');
+  if (G.epoch !== epoch || G.over) { G.busy = false; return; }
+  const move = aiPickMove(player);
+  if (!move) { G.busy = false; return; }
+  await executeTurn(move[0], move[1]);
+  if (G.epoch === epoch) {
+    G.busy = false;
+    if (!G.over) demoLoop(epoch);
+  }
 }
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
@@ -553,9 +589,9 @@ $('board').addEventListener('change', () => {
 });
 
 async function start3D() {
-  const { aiMode, aiDifficulty, turn } = aiOpts();
+  const { aiMode, aiVsAi, aiDifficulty, turn } = aiOpts();
   const ok = await Game3D.start($('game3d-wrapper'), {
-    N: +$('cube-size').value, aiMode, aiDifficulty, turn,
+    N: +$('cube-size').value, aiMode, aiVsAi, aiDifficulty, turn,
   });
   if (!ok) {
     $('board').value = '2d';

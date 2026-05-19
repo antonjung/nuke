@@ -81,4 +81,4 @@ Cell capacity by position (3D):
 
 ## service worker / versioning
 - Bump `VERSION` in `app.js` and `CACHE` in `sw.js` together on every release
-- Current version: 2.3.7
+- Current version: 2.3.8
