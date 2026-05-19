@@ -323,7 +323,7 @@ window.Game3D = (() => {
     matAnims.set(k, { mesh, fc, tc, fo, to_op: col.op, t0: performance.now(), dur });
   }
 
-  function renderCell(x, y, z) {
+  function renderCell(x, y, z, skipDots = false) {
     const k    = key(x, y, z);
     const cell = G.cells[k];
     const mesh = getMesh(x, y, z);
@@ -351,6 +351,8 @@ window.Game3D = (() => {
     }
     // Set emissive target (not animated — instant is fine)
     mesh.material.emissive.setHex(col.e);
+
+    if (skipDots) return;
 
     dotGroups[k].forEach(d => group.remove(d));
     dotGroups[k] = [];
@@ -575,6 +577,13 @@ window.Game3D = (() => {
         for (const [nx,ny,nz] of nbrs(x, y, z, N))
           receiverKeys.add(key(nx, ny, nz));
 
+      // Remove dots from exploding cells immediately — their counters are "leaving"
+      for (const [x,y,z] of toExplode) {
+        const k = key(x,y,z);
+        dotGroups[k].forEach(d => group.remove(d));
+        dotGroups[k] = [];
+      }
+
       // Launch explosion without awaiting — logic runs mid-flight so colour
       // transitions overlap with electron travel
       const electronFlight = Promise.all([
@@ -600,7 +609,8 @@ window.Game3D = (() => {
         }
       }
 
-      renderAll();
+      // Update cell colours only — dots stay hidden until electrons land
+      G.surface.forEach(([x,y,z]) => renderCell(x, y, z, true));
       updateHUD();
       if (checkWin()) { targeting = false; return; }
 
@@ -613,11 +623,12 @@ window.Game3D = (() => {
         (G.cells[k].p && G.cells[k].p !== prevOwner[k] ? capturedMeshes : recvOnlyMeshes).push(m);
       }
 
-      // Wait for electrons to land, then pulse the receiving cells
+      // Wait for electrons to land, pulse receiving cells, then reveal counter dots last
       await electronFlight;
       if (G.epoch !== epoch) { targeting = false; return; }
       await Promise.all([flashCapture(capturedMeshes), flashReceive(recvOnlyMeshes)]);
       if (G.epoch !== epoch) { targeting = false; return; }
+      renderAll();
 
       wave = [];
       for (const [x,y,z] of G.surface)
