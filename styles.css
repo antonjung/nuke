@@ -292,17 +292,7 @@ main#grid-wrapper.hidden { display: none; }
   to   { transform: rotate(360deg); }
 }
 
-@keyframes electron-impact {
-  0%   { rotate:   0deg; }
-  35%  { rotate: 200deg; }
-  60%  { rotate: 300deg; }
-  80%  { rotate: 340deg; }
-  93%  { rotate: 357deg; }
-  100% { rotate: 360deg; }
-}
-
-#grid.enhanced .cell.critical .dots-svg g  { animation-play-state: running; }
-#grid.enhanced .cell.receiving .dots-svg   { animation: electron-impact 0.7s linear 1; }
+#grid.enhanced .cell.critical .dots-svg g { animation-play-state: running; }
 
 /* ── Critical cell (one counter from exploding) ────────────────────────────── */
 .cell.blue.critical { box-shadow: inset 0 0 8px rgba(74,158,255,.1), 0 0 10px var(--blue); }
