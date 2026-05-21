@@ -119,6 +119,7 @@ function buildGrid() {
   document.documentElement.style.setProperty('--cell-px', `${cellPx}px`);
 
   gridEl.style.gridTemplateColumns = `repeat(${G.size}, var(--cell-px))`;
+  gridEl.classList.toggle('enhanced', G.diagonal);
   gridEl.innerHTML = '';
 
   for (let r = 0; r < G.size; r++) {
@@ -556,7 +557,7 @@ function newGame() {
   G.aiVsAi        = aiVsAi;
   G.aiDifficulty  = aiDifficulty;
   G.turn          = turn;
-  G.diagonal      = $('expl-mode').value === 'diagonal';
+  G.diagonal      = $('expl-mode').value === 'enhanced';
   G.grid          = mkGrid(G.size);
   G.over          = false;
   G.busy          = false;
