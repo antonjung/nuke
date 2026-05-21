@@ -292,6 +292,7 @@ main#grid-wrapper.hidden { display: none; }
   to   { transform: rotate(360deg); }
 }
 
+#grid.enhanced .cell .dots-svg g         { animation-play-state: paused; }
 #grid.enhanced .cell.critical .dots-svg g { animation-play-state: running; }
 
 /* ── Critical cell (one counter from exploding) ────────────────────────────── */

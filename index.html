@@ -108,12 +108,12 @@
     <div class="modal-card help-card">
       <h2>How to Play</h2>
       <ol>
-        <li>Take turns placing one counter on any empty square or one you already own.</li>
-        <li>When a square holds as many counters as it has neighbours it <strong>explodes</strong> — counters fly out to every neighbour.</li>
-        <li>Captured neighbours change to your colour. Chain reactions keep going until everything is stable.</li>
-        <li>You win by being the only player left with counters on the board.</li>
+        <li>Take turns placing one counter on any empty cell or one you already own.</li>
+        <li>When a cell is full it <strong>explodes</strong> — counters fly out to every neighbour and capture them.</li>
+        <li>Chain reactions keep firing until the board is stable.</li>
+        <li>Win by being the only player left with counters on the board.</li>
       </ol>
-      <p class="help-tip">Corner squares need only 2 counters to explode. Edge squares need 3. Inner squares need 4. In 3D mode, tap a surface cell to place — drag to rotate. Interior cells fill via chain reactions only and need more counters to explode. Demo mode lets the AI play both sides. <strong>Diagonal mode</strong> counts all 8 surrounding squares — corners need 3, edges need 5, and inner squares need 8.</p>
+      <p class="help-tip"><strong>Classic:</strong> cells explode when counters equal their orthogonal neighbours — corners at 2, edges at 3, inner at 4. <strong>Enhanced:</strong> all 8 surrounding cells count — corners at 3, edges at 5, inner at 8. Cells are round and electrons orbit when a cell is one away from exploding. In <strong>3D mode</strong> tap a surface cell to place and drag to rotate — interior cells fill via chain reactions only. <strong>Demo</strong> mode lets the AI play both sides.</p>
       <button id="help-close">Got it</button>
     </div>
   </div>
