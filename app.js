@@ -83,9 +83,6 @@ function dedup(cells) {
 // ── Dots SVG ─────────────────────────────────────────────────────────────────
 
 function makeDots(count, player) {
-  const positions = DOT_POSITIONS[count];
-  if (!positions) return null;
-
   const NS = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(NS, 'svg');
   svg.setAttribute('viewBox', '0 0 100 100');
@@ -93,10 +90,32 @@ function makeDots(count, player) {
   svg.setAttribute('aria-hidden', 'true');
 
   const fill = player === 'blue' ? '#4a9eff' : '#ff4a6e';
-  const dotR = count <= 3 ? 11 : count <= 5 ? 10 : 9;
-
   svg.style.filter = `drop-shadow(0 0 4px ${fill})`;
 
+  if (G.diagonal) {
+    // Orbiting electrons: N dots evenly fanned around the cell centre
+    const dotR    = count <= 3 ? 11 : count <= 5 ? 10 : 9;
+    const orbitR  = 28;
+    const period  = 3; // seconds per full rotation
+    for (let i = 0; i < count; i++) {
+      const g = document.createElementNS(NS, 'g');
+      g.style.transformOrigin = '50px 50px';
+      g.style.animation       = `electron-orbit ${period}s linear infinite`;
+      g.style.animationDelay  = `${-(period / count) * i}s`;
+      const c = document.createElementNS(NS, 'circle');
+      c.setAttribute('cx', 50);
+      c.setAttribute('cy', 50 - orbitR);
+      c.setAttribute('r', dotR);
+      c.setAttribute('fill', fill);
+      g.appendChild(c);
+      svg.appendChild(g);
+    }
+    return svg;
+  }
+
+  const positions = DOT_POSITIONS[count];
+  if (!positions) return null;
+  const dotR = count <= 3 ? 11 : count <= 5 ? 10 : 9;
   positions.forEach(([cx, cy]) => {
     const c = document.createElementNS(NS, 'circle');
     c.setAttribute('cx', cx);
@@ -145,7 +164,7 @@ function renderCell(r, c) {
 
   el.querySelectorAll('.dots-svg').forEach(s => s.remove());
 
-  if (data.n > 0 && data.p && DOT_POSITIONS[data.n]) {
+  if (data.n > 0 && data.p && (G.diagonal || DOT_POSITIONS[data.n])) {
     const svg = makeDots(data.n, data.p);
     if (svg) el.appendChild(svg);
   }
