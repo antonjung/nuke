@@ -69,6 +69,10 @@
         <option value="3" selected>3 × 3 × 3</option>
         <option value="4">4 × 4 × 4</option>
       </select>
+      <select id="expl-mode" aria-label="Explosion mode">
+        <option value="classic" selected>Classic</option>
+        <option value="diagonal">Diagonal</option>
+      </select>
       <select id="anim-speed" aria-label="Animation speed">
         <option value="1">Fast</option>
         <option value="1.7" selected>Normal</option>
@@ -109,7 +113,7 @@
         <li>Captured neighbours change to your colour. Chain reactions keep going until everything is stable.</li>
         <li>You win by being the only player left with counters on the board.</li>
       </ol>
-      <p class="help-tip">Corner squares need only 2 counters to explode. Edge squares need 3. Inner squares need 4. In 3D mode, tap a surface cell to place — drag to rotate. Interior cells fill via chain reactions only and need more counters to explode. Demo mode lets the AI play both sides.</p>
+      <p class="help-tip">Corner squares need only 2 counters to explode. Edge squares need 3. Inner squares need 4. In 3D mode, tap a surface cell to place — drag to rotate. Interior cells fill via chain reactions only and need more counters to explode. Demo mode lets the AI play both sides. <strong>Diagonal mode</strong> counts all 8 surrounding squares — corners need 3, edges need 5, and inner squares need 8.</p>
       <button id="help-close">Got it</button>
     </div>
   </div>

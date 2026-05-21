@@ -7,6 +7,11 @@ const DOT_POSITIONS = {
   1: [[50, 50]],
   2: [[33, 33], [67, 67]],
   3: [[67, 28], [33, 67], [67, 67]],
+  4: [[33, 33], [67, 33], [33, 67], [67, 67]],
+  5: [[33, 33], [67, 33], [50, 50], [33, 67], [67, 67]],
+  6: [[33, 22], [67, 22], [33, 50], [67, 50], [33, 78], [67, 78]],
+  7: [[25, 22], [75, 22], [25, 50], [50, 50], [75, 50], [25, 78], [75, 78]],
+  8: [[20, 22], [50, 22], [80, 22], [20, 50], [80, 50], [20, 78], [50, 78], [80, 78]],
 };
 
 // ── State ───────────────────────────────────────────────────────────────────
@@ -21,6 +26,7 @@ let G = {
   aiMode: true,
   aiVsAi: false,
   aiDifficulty: 'medium',
+  diagonal: false, // when true, Moore (8-way) neighbourhood for explosions
 };
 
 // ── Grid logic ───────────────────────────────────────────────────────────────
@@ -32,10 +38,18 @@ function mkGrid(size) {
 }
 
 function neighbors(r, c) {
+  if (G.diagonal) {
+    const a = [];
+    for (let dr = -1; dr <= 1; dr++)
+      for (let dc = -1; dc <= 1; dc++)
+        if ((dr || dc) && r+dr >= 0 && r+dr < G.size && c+dc >= 0 && c+dc < G.size)
+          a.push([r+dr, c+dc]);
+    return a;
+  }
   const a = [];
-  if (r > 0)         a.push([r - 1, c]);
+  if (r > 0)          a.push([r - 1, c]);
   if (r < G.size - 1) a.push([r + 1, c]);
-  if (c > 0)         a.push([r, c - 1]);
+  if (c > 0)          a.push([r, c - 1]);
   if (c < G.size - 1) a.push([r, c + 1]);
   return a;
 }
@@ -79,6 +93,7 @@ function makeDots(count, player) {
   svg.setAttribute('aria-hidden', 'true');
 
   const fill = player === 'blue' ? '#4a9eff' : '#ff4a6e';
+  const dotR = count <= 3 ? 11 : count <= 5 ? 10 : 9;
 
   svg.style.filter = `drop-shadow(0 0 4px ${fill})`;
 
@@ -86,7 +101,7 @@ function makeDots(count, player) {
     const c = document.createElementNS(NS, 'circle');
     c.setAttribute('cx', cx);
     c.setAttribute('cy', cy);
-    c.setAttribute('r', 11);
+    c.setAttribute('r', dotR);
     c.setAttribute('fill', fill);
     svg.appendChild(c);
   });
@@ -284,6 +299,14 @@ function simulateMove(grid, size, player, r, c) {
   g[r][c].n++;
 
   const nbrs = (rr, cc) => {
+    if (G.diagonal) {
+      const a = [];
+      for (let dr = -1; dr <= 1; dr++)
+        for (let dc = -1; dc <= 1; dc++)
+          if ((dr || dc) && rr+dr >= 0 && rr+dr < size && cc+dc >= 0 && cc+dc < size)
+            a.push([rr+dr, cc+dc]);
+      return a;
+    }
     const a = [];
     if (rr > 0)      a.push([rr - 1, cc]);
     if (rr < size-1) a.push([rr + 1, cc]);
@@ -323,6 +346,14 @@ function simulateMove(grid, size, player, r, c) {
 
 function evaluateGrid(grid, size, player) {
   const cap = (r, c) => {
+    if (G.diagonal) {
+      let n = 0;
+      for (let dr = -1; dr <= 1; dr++)
+        for (let dc = -1; dc <= 1; dc++)
+          if ((dr || dc) && r+dr >= 0 && r+dr < size && c+dc >= 0 && c+dc < size)
+            n++;
+      return n;
+    }
     let n = 0;
     if (r > 0) n++; if (r < size-1) n++;
     if (c > 0) n++; if (c < size-1) n++;
@@ -525,6 +556,7 @@ function newGame() {
   G.aiVsAi        = aiVsAi;
   G.aiDifficulty  = aiDifficulty;
   G.turn          = turn;
+  G.diagonal      = $('expl-mode').value === 'diagonal';
   G.grid          = mkGrid(G.size);
   G.over          = false;
   G.busy          = false;
@@ -579,8 +611,9 @@ $('board').addEventListener('change', () => {
   const is3D = $('board').value === '3d';
   $('grid-wrapper').classList.toggle('hidden', is3D);
   $('game3d-wrapper').classList.toggle('hidden', !is3D);
-  $('grid-size').style.display  = is3D ? 'none' : '';
-  $('cube-size').style.display  = is3D ? ''     : 'none';
+  $('grid-size').style.display   = is3D ? 'none' : '';
+  $('cube-size').style.display   = is3D ? ''     : 'none';
+  $('expl-mode').style.display   = is3D ? 'none' : '';
   if (is3D) {
     start3D();
   } else {
@@ -605,6 +638,7 @@ $('mode').addEventListener('change', () => {
   newGame();
 });
 $('first-move').addEventListener('change', newGame);
+$('expl-mode').addEventListener('change', newGame);
 
 function applyAnimScale(s) {
   const root = document.documentElement.style;
