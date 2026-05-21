@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = '2.4.0';
+const VERSION = '2.4.1';
 
 // ── Dot layout (viewBox 0-100) ──────────────────────────────────────────────
 const DOT_POSITIONS = {
@@ -99,9 +99,10 @@ function makeDots(count, player) {
     const period  = 3; // seconds per full rotation
     for (let i = 0; i < count; i++) {
       const g = document.createElementNS(NS, 'g');
-      g.style.transformOrigin = '50px 50px';
-      g.style.animation       = `electron-orbit ${period}s linear infinite`;
-      g.style.animationDelay  = `${-(period / count) * i}s`;
+      g.style.transformOrigin      = '50px 50px';
+      g.style.animation            = `electron-orbit ${period}s linear infinite`;
+      g.style.animationDelay       = `${-(period / count) * i}s`;
+      g.style.animationPlayState   = 'paused';
       const c = document.createElementNS(NS, 'circle');
       c.setAttribute('cx', 50);
       c.setAttribute('cy', 50 - orbitR);
