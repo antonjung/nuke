@@ -30,6 +30,7 @@
           </div>
         </div>
         <div id="turn-arrow">&#9660;</div>
+        <span id="online-badge" class="hidden">ONLINE</span>
         <div class="player-ind" id="red-ind">
           <div class="p-orb red-orb"></div>
           <div class="p-info">
@@ -90,6 +91,8 @@
 
     <footer>
       <button id="new-game">New Game</button>
+      <button id="invite-btn">Invite</button>
+      <button id="join-btn">Join</button>
     </footer>
 
   </div>
@@ -115,6 +118,30 @@
       </ol>
       <p class="help-tip"><strong>Classic:</strong> cells explode when counters equal their orthogonal neighbours — corners at 2, edges at 3, inner at 4. <strong>Enhanced:</strong> all 8 surrounding cells count — corners at 3, edges at 5, inner at 8. Cells are round and electrons orbit when a cell is one away from exploding. In <strong>3D mode</strong> tap a surface cell to place and drag to rotate — interior cells fill via chain reactions only. <strong>Demo</strong> mode lets the AI play both sides.</p>
       <button id="help-close">Got it</button>
+    </div>
+  </div>
+
+  <!-- Invite modal -->
+  <div id="invite-modal" class="hidden" role="dialog" aria-modal="true" aria-label="Invite player">
+    <div class="modal-card net-card">
+      <h2>Invite</h2>
+      <p id="invite-status">Connecting…</p>
+      <div id="qr-container"></div>
+      <p class="help-tip">Scan with the other device's camera to join, or share the link it opens.</p>
+      <button id="invite-cancel">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Join modal -->
+  <div id="join-modal" class="hidden" role="dialog" aria-modal="true" aria-label="Join game">
+    <div class="modal-card net-card">
+      <h2>Join Game</h2>
+      <div id="scan-wrap">
+        <video id="scan-video" autoplay playsinline muted></video>
+        <canvas id="scan-canvas"></canvas>
+      </div>
+      <p id="join-status">Starting camera…</p>
+      <button id="join-cancel">Cancel</button>
     </div>
   </div>
 

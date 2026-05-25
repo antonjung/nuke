@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = '2.4.5';
+const VERSION = '2.5.0';
 
 // ── Dot layout (viewBox 0-100) ──────────────────────────────────────────────
 const DOT_POSITIONS = {
@@ -12,6 +12,16 @@ const DOT_POSITIONS = {
   6: [[33, 22], [67, 22], [33, 50], [67, 50], [33, 78], [67, 78]],
   7: [[25, 22], [75, 22], [25, 50], [50, 50], [75, 50], [25, 78], [75, 78]],
   8: [[20, 22], [50, 22], [80, 22], [20, 50], [80, 50], [20, 78], [50, 78], [80, 78]],
+};
+
+// ── Online state ─────────────────────────────────────────────────────────────
+let NET = {
+  peer: null,
+  conn: null,
+  role: null,       // 'host' | 'guest'
+  active: false,
+  scanActive: false,
+  stream: null,
 };
 
 // ── State ───────────────────────────────────────────────────────────────────
@@ -71,6 +81,15 @@ function checkWin() {
 const $  = id => document.getElementById(id);
 const cellEl = (r, c) => document.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`);
 const sleep  = ms => new Promise(ok => setTimeout(ok, ms));
+
+function loadScript(src) {
+  return new Promise((res, rej) => {
+    if (document.querySelector(`script[src="${src}"]`)) { res(); return; }
+    const s = document.createElement('script');
+    s.src = src; s.onload = res; s.onerror = rej;
+    document.head.appendChild(s);
+  });
+}
 
 function dedup(cells) {
   const seen = new Set();
@@ -189,8 +208,13 @@ function updateHUD() {
   $('blue-ind').classList.toggle('active', G.turn === 'blue');
   $('red-ind').classList.toggle('active',  G.turn === 'red');
 
-  document.querySelector('#blue-ind .p-name').textContent = G.aiVsAi ? 'CPU' : 'Blue';
-  document.querySelector('#red-ind .p-name').textContent  = (G.aiMode || G.aiVsAi) ? 'CPU' : 'Red';
+  if (NET.active) {
+    document.querySelector('#blue-ind .p-name').textContent = NET.role === 'host'  ? 'You' : 'Opp';
+    document.querySelector('#red-ind .p-name').textContent  = NET.role === 'guest' ? 'You' : 'Opp';
+  } else {
+    document.querySelector('#blue-ind .p-name').textContent = G.aiVsAi ? 'CPU' : 'Blue';
+    document.querySelector('#red-ind .p-name').textContent  = (G.aiMode || G.aiVsAi) ? 'CPU' : 'Red';
+  }
 
   const hud = $('hud');
   hud.classList.toggle('red-turn', G.turn === 'red');
@@ -492,6 +516,10 @@ async function onCellClick(e) {
   if (G.over || G.busy) return;
   if (G.aiVsAi) return;
   if (G.aiMode && G.turn !== 'blue') return;
+  if (NET.active) {
+    if (NET.role === 'host'  && G.turn !== 'blue') return;
+    if (NET.role === 'guest' && G.turn !== 'red')  return;
+  }
 
   const r    = +e.currentTarget.dataset.r;
   const c    = +e.currentTarget.dataset.c;
@@ -503,6 +531,10 @@ async function onCellClick(e) {
   const myEpoch = G.epoch;
 
   let ok = await executeTurn(r, c);
+
+  if (ok && G.epoch === myEpoch && NET.active && NET.conn) {
+    NET.conn.send({ type: 'move', r, c });
+  }
 
   if (ok && G.epoch === myEpoch && G.aiMode && G.turn === 'red') {
     $('red-ind').classList.add('thinking');
@@ -527,11 +559,13 @@ function showWin(player) {
   arrow.style.color = `var(--${player})`;
   const bar = $('result-bar');
   bar.className = player;
-  bar.textContent = G.aiVsAi
-    ? (player === 'blue' ? 'Blue Wins!' : 'Red Wins!')
-    : G.aiMode
-      ? (player === 'blue' ? 'You Win!' : 'CPU Wins!')
-      : (player === 'blue' ? 'Blue Wins!' : 'Red Wins!');
+  bar.textContent = NET.active
+    ? (player === (NET.role === 'host' ? 'blue' : 'red') ? 'You Win!' : 'Opp Wins!')
+    : G.aiVsAi
+      ? (player === 'blue' ? 'Blue Wins!' : 'Red Wins!')
+      : G.aiMode
+        ? (player === 'blue' ? 'You Win!' : 'CPU Wins!')
+        : (player === 'blue' ? 'Blue Wins!' : 'Red Wins!');
 }
 
 function showStalemate(player) {
@@ -555,7 +589,7 @@ function aiOpts() {
   return { mode, aiMode, aiVsAi, aiDifficulty, turn };
 }
 
-function newGame() {
+function newGame(fromRemote = false) {
   $('win-modal').classList.add('hidden');
   $('blue-ind').classList.remove('won');
   $('red-ind').classList.remove('won');
@@ -572,7 +606,13 @@ function newGame() {
     return;
   }
 
-  const { aiMode, aiVsAi, aiDifficulty, turn } = aiOpts();
+  let aiMode, aiVsAi, aiDifficulty, turn;
+  if (NET.active) {
+    aiMode = false; aiVsAi = false; aiDifficulty = 'none'; turn = 'blue';
+  } else {
+    ({ aiMode, aiVsAi, aiDifficulty, turn } = aiOpts());
+  }
+
   G.epoch++;
   G.size          = +$('grid-size').value;
   G.aiMode        = aiMode;
@@ -585,6 +625,10 @@ function newGame() {
   G.busy          = false;
   G.played        = { blue: false, red: false };
 
+  if (NET.active && NET.conn && !fromRemote) {
+    NET.conn.send({ type: 'newgame', size: G.size, diagonal: G.diagonal });
+  }
+
   $('red-ind').classList.remove('thinking');
   $('blue-ind').classList.remove('thinking');
   buildGrid();
@@ -592,7 +636,7 @@ function newGame() {
   updateHUD();
 
   if (G.aiVsAi) demoLoop(G.epoch);
-  else if (turn === 'red') aiOpeningMove(G.epoch);
+  else if (!NET.active && turn === 'red') aiOpeningMove(G.epoch);
 }
 
 async function aiOpeningMove(epoch) {
@@ -621,6 +665,201 @@ async function demoLoop(epoch) {
     G.busy = false;
     if (!G.over) demoLoop(epoch);
   }
+}
+
+// ── Online multiplayer ────────────────────────────────────────────────────────
+
+function setSettingsEnabled(on) {
+  ['board', 'mode', 'first-move', 'grid-size', 'cube-size', 'expl-mode'].forEach(id => {
+    const el = $(id);
+    if (el) el.disabled = !on;
+  });
+}
+
+function netDispose() {
+  NET.scanActive = false;
+  const vid = $('scan-video');
+  if (vid) vid.srcObject = null;
+  if (NET.stream) { NET.stream.getTracks().forEach(t => t.stop()); NET.stream = null; }
+  if (NET.conn)   { try { NET.conn.close();    } catch(e) {} NET.conn = null; }
+  if (NET.peer)   { try { NET.peer.destroy();  } catch(e) {} NET.peer = null; }
+}
+
+function netReset() {
+  netDispose();
+  NET.role   = null;
+  NET.active = false;
+  $('online-badge').classList.add('hidden');
+  setSettingsEnabled(true);
+}
+
+function netGoLive() {
+  NET.active = true;
+  $('online-badge').classList.remove('hidden');
+  setSettingsEnabled(false);
+}
+
+async function openInvite() {
+  try {
+    await Promise.all([
+      loadScript('https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js'),
+      loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'),
+    ]);
+  } catch(e) {
+    alert('Network error — check your connection and try again.');
+    return;
+  }
+
+  netReset();
+  $('invite-status').textContent = 'Connecting to server…';
+  $('qr-container').innerHTML = '';
+  $('invite-modal').classList.remove('hidden');
+
+  NET.role = 'host';
+  NET.peer = new Peer(undefined, { debug: 0 });
+
+  NET.peer.on('open', id => {
+    const url = `${location.origin}${location.pathname}?join=${id}`;
+    $('invite-status').textContent = 'Waiting for opponent…';
+    new QRCode($('qr-container'), {
+      text: url, width: 200, height: 200,
+      colorDark: '#000000', colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.M,
+    });
+  });
+
+  NET.peer.on('connection', conn => {
+    NET.conn = conn;
+    conn.on('open', () => {
+      $('invite-modal').classList.add('hidden');
+      netGoLive();
+      newGame();
+      conn.send({ type: 'start', size: G.size, diagonal: G.diagonal });
+    });
+    conn.on('data',  receiveNetData);
+    conn.on('close', onNetDisconnect);
+    conn.on('error', onNetDisconnect);
+  });
+
+  NET.peer.on('error', err => {
+    $('invite-status').textContent = `Error: ${err.type} — please retry.`;
+  });
+}
+
+async function openJoin() {
+  try {
+    await Promise.all([
+      loadScript('https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js'),
+      loadScript('https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js'),
+    ]);
+  } catch(e) {
+    alert('Network error — check your connection and try again.');
+    return;
+  }
+
+  $('join-status').textContent = 'Starting camera…';
+  $('join-modal').classList.remove('hidden');
+
+  try {
+    NET.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+    const vid = $('scan-video');
+    vid.srcObject = NET.stream;
+    await vid.play();
+    $('join-status').textContent = 'Point at the host\'s QR code';
+    NET.scanActive = true;
+    requestAnimationFrame(scanFrame);
+  } catch(e) {
+    $('join-status').textContent =
+      e.name === 'NotAllowedError' ? 'Camera permission denied' : `Camera error: ${e.message}`;
+  }
+}
+
+function scanFrame() {
+  if (!NET.scanActive) return;
+  const vid = $('scan-video');
+  const cvs = $('scan-canvas');
+  if (vid.readyState >= vid.HAVE_ENOUGH_DATA) {
+    cvs.width  = vid.videoWidth;
+    cvs.height = vid.videoHeight;
+    const ctx = cvs.getContext('2d');
+    ctx.drawImage(vid, 0, 0);
+    const img  = ctx.getImageData(0, 0, cvs.width, cvs.height);
+    const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
+    if (code) {
+      NET.scanActive = false;
+      try {
+        const peerId = new URL(code.data).searchParams.get('join');
+        if (peerId) { connectToPeer(peerId); return; }
+      } catch(e) {}
+      $('join-status').textContent = 'Unrecognised QR — try again';
+      NET.scanActive = true;
+    }
+  }
+  requestAnimationFrame(scanFrame);
+}
+
+async function connectToPeer(peerId) {
+  $('join-status').textContent = 'Connecting…';
+  if (typeof Peer === 'undefined') {
+    try { await loadScript('https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js'); }
+    catch(e) { $('join-status').textContent = 'Failed to load network library'; return; }
+  }
+  if (NET.stream) { NET.stream.getTracks().forEach(t => t.stop()); NET.stream = null; }
+  if (NET.peer)   { try { NET.peer.destroy(); } catch(e) {} NET.peer = null; }
+
+  NET.role = 'guest';
+  NET.peer = new Peer(undefined, { debug: 0 });
+
+  NET.peer.on('open', () => {
+    NET.conn = NET.peer.connect(peerId, { reliable: true });
+    NET.conn.on('open', () => {
+      $('join-modal').classList.add('hidden');
+      netGoLive();
+    });
+    NET.conn.on('data',  receiveNetData);
+    NET.conn.on('close', onNetDisconnect);
+    NET.conn.on('error', onNetDisconnect);
+  });
+
+  NET.peer.on('error', err => {
+    $('join-status').textContent = `Connection failed: ${err.type}`;
+  });
+}
+
+function receiveNetData(data) {
+  switch (data.type) {
+    case 'start':
+    case 'newgame': {
+      if (data.size     !== undefined) $('grid-size').value = data.size;
+      if (data.diagonal !== undefined) $('expl-mode').value = data.diagonal ? 'enhanced' : 'classic';
+      newGame(true);
+      break;
+    }
+    case 'move': {
+      applyRemoteMove(data.r, data.c);
+      break;
+    }
+  }
+}
+
+async function applyRemoteMove(r, c) {
+  if (G.over || G.busy) return;
+  G.busy = true;
+  const ep = G.epoch;
+  await executeTurn(r, c);
+  if (G.epoch === ep) G.busy = false;
+}
+
+function onNetDisconnect() {
+  if (!NET.active) return;
+  NET.active = false;
+  $('online-badge').classList.add('hidden');
+  setSettingsEnabled(true);
+  const bar = $('result-bar');
+  bar.className = 'stalemate';
+  bar.textContent = 'Opponent disconnected';
+  G.over = true;
+  G.busy = false;
 }
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
@@ -683,6 +922,17 @@ $('help-modal').addEventListener('click', e => {
   if (e.target === $('help-modal')) $('help-modal').classList.add('hidden');
 });
 
+$('invite-btn').addEventListener('click', openInvite);
+$('join-btn').addEventListener('click', openJoin);
+$('invite-cancel').addEventListener('click', () => {
+  netReset();
+  $('invite-modal').classList.add('hidden');
+});
+$('join-cancel').addEventListener('click', () => {
+  netReset();
+  $('join-modal').classList.add('hidden');
+});
+
 let resizeTimer;
 window.addEventListener('resize', () => {
   clearTimeout(resizeTimer);
@@ -697,7 +947,18 @@ if ('serviceWorker' in navigator) {
   );
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   $('version').textContent = `v${VERSION}`;
+
+  const joinId = new URLSearchParams(location.search).get('join');
+  if (joinId) {
+    history.replaceState({}, '', location.pathname);
+    newGame();
+    $('join-modal').classList.remove('hidden');
+    $('join-status').textContent = 'Connecting to host…';
+    connectToPeer(joinId);
+    return;
+  }
+
   newGame();
 });
