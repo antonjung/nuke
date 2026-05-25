@@ -22,6 +22,7 @@ let NET = {
   active: false,
   scanActive: false,
   stream: null,
+  joinUrl: null,
 };
 
 // ── State ───────────────────────────────────────────────────────────────────
@@ -687,9 +688,11 @@ function netDispose() {
 
 function netReset() {
   netDispose();
-  NET.role   = null;
-  NET.active = false;
+  NET.role    = null;
+  NET.active  = false;
+  NET.joinUrl = null;
   $('online-badge').classList.add('hidden');
+  $('share-link-btn').classList.add('hidden');
   setSettingsEnabled(true);
 }
 
@@ -720,12 +723,16 @@ async function openInvite() {
 
   NET.peer.on('open', id => {
     const url = `${location.origin}${location.pathname}?join=${id}`;
+    NET.joinUrl = url;
     $('invite-status').textContent = 'Waiting for opponent…';
     new QRCode($('qr-container'), {
       text: url, width: 200, height: 200,
       colorDark: '#000000', colorLight: '#ffffff',
       correctLevel: QRCode.CorrectLevel.M,
     });
+    const btn = $('share-link-btn');
+    btn.textContent = navigator.share ? 'Share Link' : 'Copy Link';
+    btn.classList.remove('hidden');
   });
 
   NET.peer.on('connection', conn => {
@@ -924,6 +931,21 @@ $('help-modal').addEventListener('click', e => {
 
 $('invite-btn').addEventListener('click', openInvite);
 $('join-btn').addEventListener('click', openJoin);
+
+$('share-link-btn').addEventListener('click', async () => {
+  if (!NET.joinUrl) return;
+  const btn = $('share-link-btn');
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: 'Join my Nuke game', url: NET.joinUrl });
+    } else {
+      await navigator.clipboard.writeText(NET.joinUrl);
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = 'Copy Link'; }, 1800);
+    }
+  } catch(e) {}
+});
+
 $('invite-cancel').addEventListener('click', () => {
   netReset();
   $('invite-modal').classList.add('hidden');

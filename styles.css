@@ -591,6 +591,15 @@ button:active { transform: scale(0.96); }
   min-height: 100px;
 }
 
+#share-link-btn {
+  padding: 6px 18px;
+  font-size: 0.8rem;
+  background: linear-gradient(135deg, #1a2a50, #2a1a40);
+  border-color: var(--blue);
+  color: var(--blue);
+}
+#share-link-btn.hidden { display: none; }
+
 #invite-status, #join-status {
   font-size: 0.83rem;
   color: var(--text-dim);
