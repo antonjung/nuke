@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = '2.5.1';
+const VERSION = '2.5.2';
 
 // ── Dot layout (viewBox 0-100) ──────────────────────────────────────────────
 const DOT_POSITIONS = {
@@ -533,7 +533,7 @@ async function onCellClick(e) {
 
   let ok = await executeTurn(r, c);
 
-  if (ok && G.epoch === myEpoch && NET.active && NET.conn) {
+  if (G.epoch === myEpoch && NET.active && NET.conn && (ok || G.over)) {
     NET.conn.send({ type: 'move', r, c });
   }
 
