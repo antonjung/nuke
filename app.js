@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = '2.5.2';
+const VERSION = '2.5.3';
 
 // ── Dot layout (viewBox 0-100) ──────────────────────────────────────────────
 const DOT_POSITIONS = {
@@ -600,6 +600,9 @@ function newGame(fromRemote = false) {
   $('result-bar').className = 'hidden';
 
   if ($('board').value === '3d') {
+    if (NET.active && NET.conn && !fromRemote) {
+      NET.conn.send({ type: 'newgame', board: '3d', cubeSize: +$('cube-size').value });
+    }
     if (window.Game3D && Game3D.isReady()) {
       const { aiMode, aiVsAi, aiDifficulty, turn } = aiOpts();
       Game3D.newRound({ N: +$('cube-size').value, aiMode, aiVsAi, aiDifficulty, turn });
@@ -627,7 +630,7 @@ function newGame(fromRemote = false) {
   G.played        = { blue: false, red: false };
 
   if (NET.active && NET.conn && !fromRemote) {
-    NET.conn.send({ type: 'newgame', size: G.size, diagonal: G.diagonal });
+    NET.conn.send({ type: 'newgame', board: '2d', size: G.size, diagonal: G.diagonal });
   }
 
   $('red-ind').classList.remove('thinking');
@@ -699,7 +702,8 @@ function netReset() {
 function netGoLive() {
   NET.active = true;
   $('online-badge').classList.remove('hidden');
-  setSettingsEnabled(false);
+  // Only lock AI-specific controls; grid/board/expl-mode stay editable between games
+  ['mode', 'first-move'].forEach(id => { const el = $(id); if (el) el.disabled = true; });
 }
 
 async function openInvite() {
@@ -833,12 +837,26 @@ async function connectToPeer(peerId) {
   });
 }
 
-function receiveNetData(data) {
+async function receiveNetData(data) {
   switch (data.type) {
     case 'start':
     case 'newgame': {
       if (data.size     !== undefined) $('grid-size').value = data.size;
+      if (data.cubeSize !== undefined) $('cube-size').value = data.cubeSize;
       if (data.diagonal !== undefined) $('expl-mode').value = data.diagonal ? 'enhanced' : 'classic';
+      if (data.board !== undefined && data.board !== $('board').value) {
+        $('board').value = data.board;
+        const is3D = data.board === '3d';
+        $('grid-wrapper').classList.toggle('hidden', is3D);
+        $('game3d-wrapper').classList.toggle('hidden', !is3D);
+        $('grid-size').style.display  = is3D ? 'none' : '';
+        $('cube-size').style.display  = is3D ? ''     : 'none';
+        $('expl-mode').style.display  = is3D ? 'none' : '';
+        if (is3D && !(window.Game3D && Game3D.isReady())) {
+          await start3D(true);
+          return;
+        }
+      }
       newGame(true);
       break;
     }
@@ -890,7 +908,7 @@ $('board').addEventListener('change', () => {
   }
 });
 
-async function start3D() {
+async function start3D(fromRemote = false) {
   const { aiMode, aiVsAi, aiDifficulty, turn } = aiOpts();
   const ok = await Game3D.start($('game3d-wrapper'), {
     N: +$('cube-size').value, aiMode, aiVsAi, aiDifficulty, turn,
@@ -899,6 +917,10 @@ async function start3D() {
     $('board').value = '2d';
     $('board').dispatchEvent(new Event('change'));
     alert('3D mode requires an internet connection to load Three.js.');
+    return;
+  }
+  if (!fromRemote && NET.active && NET.conn) {
+    NET.conn.send({ type: 'newgame', board: '3d', cubeSize: +$('cube-size').value });
   }
 }
 
